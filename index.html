@@ -1,0 +1,822 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#08121B">
+<title>Carregamentos do e-Niro</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2308121B'/%3E%3Cpath d='M13 3 5 14h6l-1 7 8-11h-6z' fill='%238DC63F'/%3E%3C/svg%3E">
+<style>
+  :root { --font-anthropic-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color-scheme: dark; }
+  html, body { margin: 0; background: #050b11; }
+  body { font-family: var(--font-anthropic-sans); -webkit-font-smoothing: antialiased; }
+  #dash-root { max-width: 760px; margin: 0 auto; padding: 12px 12px 32px; box-sizing: border-box; }
+  #dash-root *, #dash-root *::before, #dash-root *::after { box-sizing: border-box; }
+  .dash-skeleton { color: transparent !important; background: rgba(255,255,255,.06); border-radius: 8px; }
+  .ev-foot { text-align: center; color: #5d6873; font-size: 12px; margin-top: 18px; }
+</style>
+<script src="d3.min.js"></script>
+<script>
+window.dash = (() => {
+  const SOURCES = { faturas: 'data/faturas.csv', km: 'data/km.csv', odometro: 'data/odometro.csv', gasoleo: 'data/gasoleo.csv', estado: 'data/estado.json' };
+  const raw = {}, status = {}, calcs = {}, cache = {}, draws = new Map(), onD = [];
+  let started = false;
+  const split = (line) => {
+    const out = []; let cur = '', q = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (q) { if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
+      else if (c === '"') q = true; else if (c === ',') { out.push(cur); cur = ''; } else cur += c;
+    }
+    out.push(cur); return out;
+  };
+  const parseCSV = (t) => {
+    const lines = t.replace(/^﻿/, '').trim().split(/\r?\n/).filter((l) => l.trim());
+    const h = split(lines[0]);
+    return lines.slice(1).map((l) => { const p = split(l); const o = {}; h.forEach((k, i) => { o[k] = p[i] ?? ''; }); return o; });
+  };
+  const data = (id) => {
+    if (calcs[id]) {
+      if (cache[id]) return cache[id];
+      const ins = calcs[id].inputs.map(data);
+      const bad = ins.find((x) => x.status !== 'ok');
+      if (bad) return { status: bad.status, data: [], message: bad.message, refreshing: false, meta: [] };
+      let res;
+      try { res = { status: 'ok', data: calcs[id].fn(...ins.map((x) => x.data)), refreshing: false, meta: [] }; }
+      catch (e) { console.error(id, e); res = { status: 'error', data: [], message: String(e), refreshing: false, meta: [] }; }
+      if (Array.isArray(res.data) && res.data[0]) res.columns = Object.keys(res.data[0]);
+      cache[id] = res; return res;
+    }
+    if (raw[id]) { const d = raw[id]; return { status: 'ok', data: d, columns: d[0] ? Object.keys(d[0]) : [], refreshing: false, meta: [] }; }
+    return { status: status[id] || 'loading', data: [], refreshing: false, meta: [] };
+  };
+  const run = (name) => {
+    const fn = draws.get(name); if (!fn) return;
+    document.querySelectorAll(`[data-draw="${name}"]`).forEach((el) => { try { fn(el); } catch (e) { console.error(name, e); } });
+  };
+  const renderAll = () => {
+    Object.keys(cache).forEach((k) => delete cache[k]);
+    onD.forEach((f) => { try { f(); } catch (e) { console.error(e); } });
+    draws.forEach((_, n) => run(n));
+  };
+  const start = async () => {
+    started = true; renderAll();
+    await Promise.all(Object.entries(SOURCES).map(async ([id, url]) => {
+      try {
+        const r = await fetch(url + '?v=' + Date.now(), { cache: 'no-store' });
+        if (!r.ok) throw new Error(r.status);
+        const t = await r.text();
+        raw[id] = url.endsWith('.json') ? JSON.parse(t) : parseCSV(t);
+        status[id] = 'ok';
+      } catch (e) { console.error(id, e); status[id] = 'error'; }
+    }));
+    renderAll();
+    let w = window.innerWidth, tm;
+    window.addEventListener('resize', () => { clearTimeout(tm); tm = setTimeout(() => { if (window.innerWidth !== w) { w = window.innerWidth; renderAll(); } }, 150); });
+  };
+  return {
+    data, start,
+    calc: (id, o) => { calcs[id] = o; },
+    loader: () => {},
+    onData: (fn) => { onD.push(fn); if (started) { try { fn(); } catch (e) { console.error(e); } } },
+    draw: (name, fn) => { if (typeof fn === 'function') { draws.set(name, fn); if (started) run(name); } else run(name); },
+    colors: ['#5FE3D0', '#8DC63F', '#1A9E86', '#B5E46A', '#7FB3FF', '#FFB21E', '#FF8A93', '#C9A7FF'],
+    params: () => ({}), setParams: () => {}, resetParams: () => {}, setLink: () => {}, refresh: () => {}
+  };
+})();
+
+</script>
+</head>
+<body>
+<div id="dash-root">
+
+<style>
+  #dash-root { --dash-gutter: 0; }
+  .ev {
+    --ev-bg: #08121B; --ev-card: #141F29; --ev-line: rgba(255,255,255,.14); --ev-line-soft: rgba(255,255,255,.07);
+    --ev-fg: #F2F5F7; --ev-muted: #8D99A6; --ev-lime: #8DC63F; --ev-teal: #1A9E86; --ev-cyan: #5FE3D0;
+    color: var(--ev-fg); font-family: var(--font-anthropic-sans);
+    background:
+      radial-gradient(60rem 30rem at 50% 18rem, rgba(26,158,134,.22), transparent 70%),
+      radial-gradient(40rem 30rem at 85% 70%, rgba(90,70,140,.18), transparent 70%),
+      var(--ev-bg);
+    border-radius: 28px; padding: clamp(18px, 4vw, 40px); display: flex; flex-direction: column; gap: 28px; overflow: hidden;
+  }
+  .ev p, .ev h1, .ev h2 { margin: 0; }
+  .ev-top { display: flex; justify-content: space-between; align-items: center; }
+  .ev-brand { font-size: 1.6rem; font-weight: 600; letter-spacing: .02em; }
+  .ev-chip { font-size: .8rem; color: var(--ev-muted); border: 1px solid var(--ev-line); border-radius: 999px; padding: 6px 12px; }
+
+  .ev-hero { display: grid; justify-items: center; text-align: center; gap: 10px; }
+  .ev-kicker { font-size: .85rem; color: var(--ev-muted); letter-spacing: .12em; text-transform: uppercase; }
+  .ev-big { font-size: clamp(3.4rem, 11vw, 5.6rem); font-weight: 500; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .ev-big .ev-unit { font-size: .38em; font-weight: 500; vertical-align: .95em; margin-left: .12em; }
+  .ev-meter { display: flex; align-items: center; gap: 10px; width: min(17rem, 80%); }
+  .ev-track { flex: 1; height: 7px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
+  .ev-fill { height: 100%; width: 0; background: var(--ev-lime); border-radius: 4px; box-shadow: 0 0 14px rgba(141,198,63,.7); transition: width .9s cubic-bezier(.2,.8,.2,1); }
+  .ev-bolt { width: 18px; height: 18px; fill: rgba(255,255,255,.45); }
+  .ev-sub { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+  .ev-sub i { font-style: normal; color: var(--ev-muted); margin: 0 .4em; }
+  .ev-tile#t-cash { border-color: rgba(141,198,63,.55); background: linear-gradient(160deg, rgba(141,198,63,.14), rgba(20,31,41,.6) 60%); }
+  .ev .ev-cash { color: var(--ev-lime); }
+  .ev .ev-paidv { color: var(--ev-fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ev .ev-odo { font-size: .78rem; opacity: .75; }
+  .ev-hint { font-size: .85rem; color: var(--ev-muted); }
+  .ev-empty { font-size: .95rem; color: var(--ev-muted); max-width: 26rem; }
+
+  .ev-carwrap { position: relative; width: min(100%, 540px); justify-self: center; margin: 10px 0 4px; }
+  .ev-carwrap::before { content: ""; position: absolute; inset: 0 -6% 10%; background: radial-gradient(closest-side, rgba(26,158,134,.42), transparent); filter: blur(14px); }
+  .ev-carwrap::after { content: ""; position: absolute; left: 8%; right: 6%; bottom: -2%; height: 12%; background: radial-gradient(closest-side, rgba(0,0,0,.75), transparent); filter: blur(6px); }
+  .ev-photo { position: relative; z-index: 1; display: block; width: 100%; height: auto; filter: drop-shadow(0 10px 18px rgba(0,0,0,.45)); }
+  .ev-l { position: absolute; z-index: 2; transform: translate(-50%,-50%); border-radius: 50%; pointer-events: none; opacity: 0; }
+  .ev-head { background: radial-gradient(closest-side, #ffffff 0%, #ffffff 35%, rgba(255,255,255,.75) 60%, rgba(255,255,255,0) 100%); box-shadow: 0 0 16px 6px rgba(255,255,255,.85), 0 0 42px 14px rgba(255,255,255,.4); }
+  .ev-head::after { content: ""; position: absolute; left: 50%; top: 50%; width: 300%; height: 12%; transform: translate(-50%,-50%); border-radius: 50%; background: linear-gradient(90deg, transparent, rgba(255,255,255,.95), transparent); box-shadow: 0 0 8px 2px rgba(255,255,255,.6); }
+  .ev-drl { background: radial-gradient(closest-side, #ffffff 0%, rgba(255,255,255,.9) 45%, rgba(255,255,255,0) 100%); box-shadow: 0 0 12px 4px rgba(255,255,255,.8); }
+  .ev-turn { background: radial-gradient(closest-side, #fff6cc 0%, #ffb21e 40%, rgba(255,120,0,.9) 70%, transparent); box-shadow: 0 0 16px 6px rgba(255,160,20,.95), 0 0 40px 14px rgba(255,120,0,.6); }
+  .ev-drlsvg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; opacity: 0; overflow: visible; }
+  .ev-beam { position: absolute; z-index: 0; left: -10%; top: 58%; width: 60%; height: 38%; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 72% 28%, rgba(255,255,255,.45), rgba(255,255,255,.12) 40%, transparent 70%); filter: blur(8px); }
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes ev-head { 0%, 8% { opacity: 0; } 14%, 80% { opacity: 1; } 88%, 100% { opacity: 0; } }
+    @keyframes ev-drl { 0%, 3% { opacity: 0; } 7%, 84% { opacity: .95; } 92%, 100% { opacity: 0; } }
+    @keyframes ev-beam { 0%, 10% { opacity: 0; } 18%, 78% { opacity: 1; } 88%, 100% { opacity: 0; } }
+    @keyframes ev-turn { 0%, 22% { opacity: 0; } 24%, 28% { opacity: 1; } 30%, 32% { opacity: 0; } 34%, 38% { opacity: 1; } 40%, 42% { opacity: 0; } 44%, 48% { opacity: 1; } 50%, 100% { opacity: 0; } }
+    .ev-head { animation: ev-head 11s ease-in-out 2.2s infinite; }
+    .ev-drl, .ev-drlsvg { animation: ev-drl 11s ease-in-out 2.2s infinite; }
+    .ev-beam { animation: ev-beam 11s ease-in-out 2.2s infinite; }
+    .ev-turn { animation: ev-unlock-blink 1.6s linear .3s 1, ev-turn 11s linear 2.2s infinite; }
+  }
+  @media (prefers-reduced-motion: reduce) { .ev-head, .ev-drl, .ev-drlsvg { opacity: .9; } }
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes ev-unlock-blink { 0%, 8% { opacity: 0; } 12%, 26% { opacity: 1; } 32%, 42% { opacity: 0; } 46%, 60% { opacity: 1; } 66%, 100% { opacity: 0; } }
+      }
+  .ev-nav { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; width: min(100%, 30rem); }
+  .ev-navmid { display: grid; justify-items: center; gap: 10px; min-width: 0; }
+  .ev-arrow { all: unset; cursor: pointer; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--ev-line); background: rgba(255,255,255,.04); transition: background .2s, opacity .2s; }
+  .ev-arrow:hover { background: rgba(255,255,255,.1); }
+  .ev-arrow:focus-visible { outline: 2px solid var(--ev-cyan); outline-offset: 3px; }
+  .ev-arrow[disabled] { opacity: .25; cursor: default; }
+  .ev-arrow svg { width: 20px; height: 20px; fill: none; stroke: var(--ev-fg); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .ev-car { width: min(100%, 460px); height: auto; justify-self: center; margin: 4px 0 -6px; }
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes ev-pulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+    .ev-port { animation: ev-pulse 2.4s ease-in-out infinite; }
+    @keyframes ev-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+    .ev-bar-anim { transform-box: fill-box; transform-origin: bottom; animation: ev-grow .8s cubic-bezier(.2,.8,.2,1); }
+  }
+
+  .ev-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr)); gap: 12px; }
+  .ev-tile { border: 1px solid var(--ev-line); border-radius: 22px; padding: 18px 18px 14px; min-height: 9.5rem; display: flex; flex-direction: column; background: rgba(20,31,41,.6); backdrop-filter: blur(6px); }
+  .ev-tile-t { font-weight: 600; font-size: 1rem; }
+  .ev-tile-v { font-size: 1.5rem; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .ev-tile-n { color: var(--ev-muted); font-size: .85rem; margin-top: 2px; }
+  .ev-ico { margin-top: auto; align-self: flex-end; width: 30px; height: 30px; fill: none; stroke: var(--ev-fg); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  .ev-tile { position: relative; }
+  .ev-tile-click { cursor: pointer; transition: border-color .2s, background .2s; }
+  .ev-tile-click:hover { border-color: rgba(255,255,255,.3); }
+  .ev-tile-click:focus-visible { outline: 2px solid var(--ev-cyan); outline-offset: 3px; }
+  .ev-chev { transition: transform .25s; }
+  .ev-tile-click[aria-expanded="true"] { border-color: var(--ev-cyan); z-index: 20; }
+  .ev-tile-click[aria-expanded="true"] .ev-chev { transform: rotate(180deg); }
+  .ev-drop { position: absolute; z-index: 21; left: 0; top: calc(100% + 8px); width: max(100%, 18rem); max-width: calc(100vw - 48px); background: #0E1821; border: 1px solid var(--ev-line); border-radius: 18px; box-shadow: 0 16px 36px rgba(0,0,0,.55); padding: 14px 16px; cursor: default; }
+  .ev-drop-t { font-size: .8rem; color: var(--ev-muted); margin: 0 0 4px !important; }
+  .ev-weeks { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+  .ev-wk { display: grid; grid-template-columns: 7.5rem 1fr auto; gap: 8px; align-items: center; font-size: .78rem; color: var(--ev-muted); font-variant-numeric: tabular-nums; }
+  .ev-wk-bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
+  .ev-wk-bar > div { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--ev-teal), var(--ev-cyan)); }
+  .ev-wk-v { color: var(--ev-fg); text-align: right; min-width: 4.5rem; }
+  .ev-wk.ev-now { color: var(--ev-fg); }
+  .ev-wk.ev-now .ev-wk-bar > div { background: var(--ev-lime); }
+  .ev-status { display: inline-flex; align-items: center; gap: 6px; }
+  .ev-sico { width: 14px; height: 14px; fill: none; stroke: var(--ev-cyan); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .ev-tile-km { border-color: rgba(95,227,208,.55); }
+  .ev-tile-poup { border-color: rgba(141,198,63,.55); }
+  .ev .ev-neg { color: #FF8A93; }
+  .ev-table tr.ev-caro td { background: rgba(255,90,102,.12); color: #FFD1D4; }
+  .ev-table tr.ev-caro td:first-child { border-radius: 10px 0 0 10px; }
+  .ev-table tr.ev-caro td:last-child { border-radius: 0 10px 10px 0; }
+  .ev-badge { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: rgba(255,90,102,.28); color: #FFB3B8; font-size: .72rem; }
+  .ev-tablenote { font-size: .8rem; color: var(--ev-muted); margin-top: 4px !important; }
+  .ev-tabs { display: flex; gap: 28px; border-bottom: 1px solid var(--ev-line-soft); }
+  .ev-tab { all: unset; cursor: pointer; font-size: 1.35rem; color: var(--ev-muted); padding: 0 2px 12px; border-bottom: 3px solid transparent; margin-bottom: -1px; }
+  .ev-tab[aria-selected="true"] { color: var(--ev-fg); font-weight: 600; border-bottom-color: var(--ev-fg); }
+  .ev-tab:focus-visible { outline: 2px solid var(--ev-cyan); outline-offset: 4px; border-radius: 4px; }
+
+  .ev-panel { display: flex; flex-direction: column; gap: 16px; }
+  .ev-card { background: var(--ev-card); border-radius: 24px; padding: 22px; min-width: 0; }
+  .ev-h { font-size: 1.15rem; font-weight: 600; }
+  .ev-note { font-size: .85rem; color: var(--ev-muted); margin-top: 4px !important; }
+  .ev-chart { position: relative; min-height: 240px; margin-top: 14px; }
+  .ev-ceme { min-height: 120px; margin-top: 8px; display: flex; flex-direction: column; }
+  .ev-crow { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 14px 0; border-bottom: 1px solid var(--ev-line-soft); }
+  .ev-crow:last-child { border-bottom: 0; }
+  .ev-cname { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ev-cval { font-variant-numeric: tabular-nums; text-align: right; }
+  .ev-cmeta { color: var(--ev-muted); font-size: .85rem; }
+  .ev-cpct { color: var(--ev-lime); font-size: .85rem; text-align: right; font-variant-numeric: tabular-nums; }
+  .ev-cbar { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
+  .ev-cbar > div { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--ev-teal), var(--ev-cyan)); }
+  .ev-crow-btn { cursor: pointer; border-radius: 12px; }
+  .ev-crow-btn:focus-visible { outline: 2px solid var(--ev-cyan); outline-offset: 2px; }
+  .ev-cchev { width: 14px; height: 14px; fill: none; stroke: var(--ev-muted); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; vertical-align: -2px; transition: transform .25s; }
+  .ev-crow-btn[aria-expanded="true"] .ev-cchev { transform: rotate(180deg); stroke: var(--ev-cyan); }
+  .ev-crow-btn[aria-expanded="true"] .ev-cname { color: var(--ev-cyan); }
+  .ev-cmeses { background: #0E1821; border: 1px solid var(--ev-line); border-radius: 16px; padding: 12px 14px; margin: 2px 0 10px; display: flex; flex-direction: column; gap: 6px; }
+  .ev-cmeses .ev-wk { grid-template-columns: 7.5rem 1fr auto; }
+  .ev-muted-line { color: var(--ev-muted); font-size: .9rem; display: flex; align-items: center; justify-content: center; min-height: inherit; }
+  .ev-fail { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: inherit; color: var(--ev-muted); font-size: .85rem; }
+  .ev-fail::before { content: ""; width: .375rem; height: .375rem; border-radius: 50%; background: #FF5A66; }
+  .ev-tip { position: absolute; pointer-events: none; background: #0E1821; border: 1px solid var(--ev-line); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.4); padding: 8px 12px; font-size: .8rem; white-space: nowrap; color: var(--ev-fg); }
+  .ev-tip-d { color: var(--ev-muted); }
+
+  .ev-tablebox { max-height: 28rem; overflow: auto; margin-top: 10px; }
+  .ev-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .95rem; }
+  .ev-table th { position: sticky; top: 0; background: var(--ev-card); text-align: left; font-weight: 500; color: var(--ev-muted); font-size: .8rem; padding: 8px 10px; border-bottom: 1px solid var(--ev-line); }
+  .ev-table td { padding: 12px 10px; border-bottom: 1px solid var(--ev-line-soft); }
+  .ev-table .ev-num { text-align: right; }
+  .ev [data-dash-source-state=empty] { color: transparent; }
+  .ev [data-dash-source-state=refreshing] { opacity: .5; transition: opacity .3s; }
+</style>
+
+<div class="ev">
+  <div class="ev-top">
+    <p class="ev-brand">E-NIRO</p>
+    <p class="ev-chip ev-status"><svg class="ev-sico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg><span data-draw="estado_chip" data-source="estado">—</span></p>
+  </div>
+
+  <section class="ev-hero" id="resumo">
+    <div class="ev-nav">
+      <button class="ev-arrow" data-nav="-1" aria-label="Mês anterior"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5 8 12l7 7"/></svg></button>
+      <div class="ev-navmid">
+        <p class="ev-kicker" data-draw="mes_nome" data-source="por_mes">—</p>
+        <p class="ev-big dash-skeleton" data-draw="big_mes" data-source="por_mes" data-field="valor">—</p>
+      </div>
+      <button class="ev-arrow" data-nav="1" aria-label="Mês seguinte"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+    </div>
+    <div class="ev-meter">
+      <div class="ev-track"><div class="ev-fill" data-draw="barra_mes" data-source="por_mes" data-field="valor"></div></div>
+      <svg class="ev-bolt" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+    </div>
+    <p class="ev-sub" data-take="cheio" hidden><span data-draw="sub_kwh" data-source="por_mes" data-field="kwh">—</span><i>/</i><span data-draw="sub_n" data-source="por_mes" data-field="carregamentos">—</span></p>
+    <p class="ev-hint" data-take="cheio" hidden>Usa as setas para mudar de mês · a barra compara com o teu mês mais caro</p>
+    <p class="ev-empty" data-take="vazio" hidden>Ainda não há faturas. Envia os prints ou PDFs no chat e isto ganha vida.</p>
+
+    <div class="ev-carwrap"><img class="ev-photo" alt="e-Niro cinza claro" src="car.webp"><span class="ev-l ev-head" style="left:37.2%;top:51.4%;width:13%;height:7%;transform:translate(-50%,-50%) rotate(-17deg)" aria-hidden="true"></span><svg class="ev-drlsvg" viewBox="0 0 963 521" preserveAspectRatio="none" aria-hidden="true"><defs><filter id="evDrlGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter></defs><g stroke="#fff" stroke-linecap="round" fill="none"><path d="M335 354 L317.5 374 M313.5 391 L346 419" stroke-width="14" opacity=".7" filter="url(#evDrlGlow)"/><path d="M335 354 L317.5 374 M313.5 391 L346 419" stroke-width="6"/></g></svg><span class="ev-l ev-turn" style="left:62.8%;top:39.6%;width:6.5%;height:3%;transform:translate(-50%,-50%) rotate(-4deg)" aria-hidden="true"></span><span class="ev-l ev-turn" style="left:31.5%;top:55%;width:4%;height:4%" aria-hidden="true"></span><span class="ev-beam" aria-hidden="true"></span></div>
+    <p class="ev-hint ev-odo"><span data-draw="odometro" data-source="odometro" data-field="km">—</span> – quilómetros atuais</p>
+  </section>
+
+  <section class="ev-tiles" aria-label="Números do período">
+    <div class="ev-tile ev-tile-click" id="t-semana" role="button" tabindex="0" aria-expanded="false" aria-controls="ev-drop-semanas">
+      <p class="ev-tile-t">Média por semana</p>
+      <p class="ev-tile-v dash-skeleton" data-draw="kpi_media" data-source="media_semanal" data-field="media">—</p>
+      <p class="ev-tile-n">Toca para ver as semanas</p>
+      <svg class="ev-ico ev-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      <div class="ev-drop" id="ev-drop-semanas" hidden>
+        <p class="ev-drop-t">Semanas do mês escolhido · segunda a domingo</p>
+        <div class="ev-weeks" data-draw="lista_semanas" data-source="semanas"></div>
+      </div>
+    </div>
+    <div class="ev-tile" id="t-energia">
+      <p class="ev-tile-t">Energia</p>
+      <p class="ev-tile-v dash-skeleton" data-draw="kpi_kwh" data-source="por_mes" data-field="kwh">—</p>
+      <p class="ev-tile-n">No mês escolhido</p>
+      <svg class="ev-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+    </div>
+    <div class="ev-tile ev-tile-km" id="t-km100">
+      <p class="ev-tile-t">Custo por 100 km</p>
+      <p class="ev-tile-v dash-skeleton" data-draw="kpi_km100" data-source="custo_km" data-field="custo_100km">—</p>
+      <p class="ev-tile-n" data-draw="nota_km100" data-source="custo_km" data-field="km">—</p>
+      <svg class="ev-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M6 15l3-8h6l3 8M9 11h6"/></svg>
+    </div>
+    <div class="ev-tile ev-tile-poup" id="t-poupanca">
+      <p class="ev-tile-t">Poupança vs gasóleo</p>
+      <p class="ev-tile-v ev-cash dash-skeleton" data-draw="kpi_poup" data-source="custo_km" data-field="poupanca">—</p>
+      <p class="ev-tile-n" data-draw="nota_poup" data-source="custo_km" data-field="gasoleo_eur">—</p>
+      <svg class="ev-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v14M3 20h14M15 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V9l-3-3M8 8h4"/></svg>
+    </div>
+    <div class="ev-tile" id="t-preco">
+      <p class="ev-tile-t">Preço médio</p>
+      <p class="ev-tile-v dash-skeleton" data-draw="kpi_preco" data-source="por_mes" data-field="preco">—</p>
+      <p class="ev-tile-n">Por kWh, no mês escolhido</p>
+      <svg class="ev-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 6.5A7 7 0 1 0 17 17.5M4 10h9M4 14h9"/></svg>
+    </div>
+    <div class="ev-tile" id="t-cash">
+      <p class="ev-tile-t">Cashback · saldo extra</p>
+      <p class="ev-tile-v ev-cash dash-skeleton" data-draw="kpi_cash" data-source="por_mes" data-field="cashback">—</p>
+      <p class="ev-tile-n">Pago na prática <b class="ev-paidv" data-draw="pago_mes" data-source="por_mes" data-field="pago">—</b></p>
+      <svg class="ev-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v4h4M15.5 9.5A3 3 0 1 0 15.5 14.5M9 11h5M9 13h5"/></svg>
+    </div>
+    <div class="ev-tile" id="t-n">
+      <p class="ev-tile-t">Carregamentos</p>
+      <p class="ev-tile-v dash-skeleton" data-draw="kpi_n" data-source="por_mes" data-field="carregamentos">—</p>
+      <p class="ev-tile-n">Faturas no mês escolhido</p>
+      <svg class="ev-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2v5M15 2v5M6 7h12v4a6 6 0 0 1-12 0zM12 17v5"/></svg>
+    </div>
+  </section>
+
+  <div>
+    <div class="ev-tabs" role="tablist">
+      <button class="ev-tab" role="tab" aria-selected="true" data-tab="analise">Análise</button>
+      <button class="ev-tab" role="tab" aria-selected="false" data-tab="faturas">Faturas</button>
+    </div>
+  </div>
+
+  <section class="ev-panel" data-panel="analise" id="analise">
+    <div class="ev-card" id="por-mes">
+      <h2 class="ev-h">Gasto por mês</h2>
+      <p class="ev-note">Últimos 12 meses com faturas · o mês escolhido a verde, toca numa barra para o abrir</p>
+      <div class="ev-chart" data-draw="graf_mes" data-source="por_mes"></div>
+    </div>
+    <div class="ev-card" id="por-ceme">
+      <h2 class="ev-h">Por CEME</h2>
+      <p class="ev-note">Quanto pagaste a cada um, desde o início · toca num para ver os meses</p>
+      <div class="ev-ceme" data-draw="graf_ceme" data-source="por_ceme ceme_mes"></div>
+    </div>
+  </section>
+
+  <section class="ev-panel" data-panel="faturas" id="faturas" hidden>
+    <div class="ev-card">
+      <h2 class="ev-h">Todas as faturas</h2>
+      <p class="ev-note">Mais recentes primeiro · a vermelho os carregamentos com €/kWh pelo menos 50% acima da tua média</p>
+      <div class="ev-tablebox">
+        <table class="ev-table" data-source="faturas alertas" data-row-key="id">
+          <thead>
+            <tr>
+              <th data-field="data">Data</th>
+              <th data-field="ceme">CEME</th>
+              <th data-field="kwh" class="ev-num">kWh</th>
+              <th data-field="valor" class="ev-num">Valor</th>
+              <th data-field="cashback" class="ev-num">Cashback</th>
+            </tr>
+          </thead>
+          <tbody data-draw="tabela"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  dash.calc('por_mes', {
+    inputs: ['faturas'],
+    title: 'Gasto por mês',
+    description: 'Valor, kWh, carregamentos, cashback indicado por ti, valor pago na prática e preço médio por kWh, por mês.',
+    fn: (faturas) => {
+      const m = new Map();
+      for (const f of faturas) {
+        const k = String(f.data).slice(0, 7);
+        const a = m.get(k) || { mes: k, valor: 0, kwh: 0, carregamentos: 0, cashback: 0 };
+        a.valor += Number(f.valor) || 0;
+        a.kwh += Number(f.kwh) || 0;
+        a.cashback += Number(f.cashback) || 0;
+        a.carregamentos += 1;
+        m.set(k, a);
+      }
+      return [...m.values()]
+        .sort((a, b) => a.mes.localeCompare(b.mes))
+        .map((a) => ({
+          mes: a.mes,
+          valor: Math.round(a.valor * 100) / 100,
+          kwh: Math.round(a.kwh * 10) / 10,
+          carregamentos: a.carregamentos,
+          cashback: Math.round(a.cashback * 100) / 100,
+          pago: Math.round((a.valor - a.cashback) * 100) / 100,
+          preco: a.kwh > 0 ? Math.round((a.valor / a.kwh) * 1000) / 1000 : null
+        }));
+    }
+  });
+
+  dash.calc('semanas', {
+    inputs: ['faturas'],
+    title: 'Gasto por semana',
+    description: 'Valor por semana completa (segunda a domingo). Cada semana conta no mês onde cai a quinta-feira, ou seja, onde estão a maioria dos seus dias.',
+    fn: (faturas) => {
+      const dias = faturas.map((f) => String(f.data).slice(0, 10)).sort();
+      if (!dias.length) return [];
+      const seg = (d) => { const x = new Date(d); x.setUTCDate(x.getUTCDate() - ((x.getUTCDay() + 6) % 7)); return x; };
+      const h = new Date();
+      const hoje = new Date(Date.UTC(h.getFullYear(), h.getMonth(), h.getDate()));
+      const out = [];
+      for (let m = seg(new Date(dias[0] + 'T00:00:00Z')); m <= hoje; m.setUTCDate(m.getUTCDate() + 7)) {
+        const ini = m.toISOString().slice(0, 10);
+        const f6 = new Date(m); f6.setUTCDate(f6.getUTCDate() + 6);
+        const qui = new Date(m); qui.setUTCDate(qui.getUTCDate() + 3);
+        const fim = f6.toISOString().slice(0, 10);
+        let valor = 0, n = 0;
+        for (const f of faturas) { const d = String(f.data).slice(0, 10); if (d >= ini && d <= fim) { valor += Number(f.valor) || 0; n += 1; } }
+        out.push({ inicio: ini, fim, mes: qui.toISOString().slice(0, 7), valor: Math.round(valor * 100) / 100, carregamentos: n });
+      }
+      return out;
+    }
+  });
+
+  dash.calc('media_semanal', {
+    inputs: ['semanas'],
+    title: 'Média por semana',
+    description: 'Soma das semanas do mês a dividir pelo número dessas semanas (a semana atual conta como uma).',
+    fn: (semanas) => {
+      const m = new Map();
+      for (const w of semanas) {
+        const a = m.get(w.mes) || { mes: w.mes, valor: 0, semanas: 0 };
+        a.valor += w.valor; a.semanas += 1;
+        m.set(w.mes, a);
+      }
+      return [...m.values()].map((a) => ({ mes: a.mes, media: Math.round((a.valor / a.semanas) * 100) / 100, semanas: a.semanas }));
+    }
+  });
+
+  dash.calc('ceme_mes', {
+    inputs: ['faturas'],
+    title: 'Gasto por CEME e mês',
+    description: 'Valor, kWh e carregamentos de cada CEME em cada mês.',
+    fn: (faturas) => {
+      const m = new Map();
+      for (const f of faturas) {
+        const ceme = String(f.ceme || 'Sem CEME').trim(), mes = String(f.data).slice(0, 7);
+        const k = ceme + '|' + mes;
+        const a = m.get(k) || { ceme, mes, valor: 0, kwh: 0, carregamentos: 0 };
+        a.valor += Number(f.valor) || 0; a.kwh += Number(f.kwh) || 0; a.carregamentos += 1;
+        m.set(k, a);
+      }
+      return [...m.values()].map((a) => ({ ...a, valor: Math.round(a.valor * 100) / 100, kwh: Math.round(a.kwh * 10) / 10 }));
+    }
+  });
+
+  dash.calc('km_mes', {
+    inputs: ['km'],
+    title: 'Quilómetros por mês',
+    description: 'Distância conduzida em cada mês, tal como aparece no relatório de condução da app da Kia.',
+    fn: (km) => km.filter((x) => x.mes && Number(x.km) > 0).map((x) => ({ mes: String(x.mes).slice(0, 7), km: Number(x.km) }))
+  });
+
+  dash.calc('custo_km', {
+    inputs: ['por_mes', 'km_mes', 'gasoleo'],
+    title: 'Custo por 100 km e poupança',
+    description: 'Pago na prática (gasto menos cashback) a dividir pelos km do mês; poupança = km × 4,35 L/100 km (consumo do Focus) × preço do gasóleo − pago na prática.',
+    fn: (por_mes, km_mes, gasoleo) => {
+      const CONSUMO_FOCUS = 4.35;
+      const g = [...gasoleo].sort((a, b) => String(a.data).localeCompare(String(b.data))).pop();
+      const preco = g ? Number(g.preco_litro) : null;
+      return km_mes.filter((k) => k.km > 0).map((k) => {
+        const p = por_mes.find((x) => x.mes === k.mes);
+        const valor = p ? (p.pago ?? p.valor) : 0;
+        const gas = preco ? (k.km / 100) * CONSUMO_FOCUS * preco : null;
+        return {
+          mes: k.mes, km: k.km,
+          custo_100km: Math.round((valor / k.km) * 10000) / 100,
+          gasoleo_eur: gas === null ? null : Math.round(gas * 100) / 100,
+          poupanca: gas === null ? null : Math.round((gas - valor) * 100) / 100
+        };
+      });
+    }
+  });
+
+  dash.calc('alertas', {
+    inputs: ['faturas'],
+    title: 'Carregamentos caros',
+    description: 'Preço por kWh de cada fatura; é caro quando fica 50% ou mais acima do preço médio de todas as faturas.',
+    fn: (faturas) => {
+      const v = faturas.reduce((s, f) => s + (Number(f.valor) || 0), 0);
+      const k = faturas.reduce((s, f) => s + (Number(f.kwh) || 0), 0);
+      const media = k > 0 ? v / k : 0;
+      return faturas.filter((f) => Number(f.kwh) >= 1).map((f) => {
+        const p = Number(f.valor) / Number(f.kwh);
+        return { id: f.id, preco_kwh: Math.round(p * 1000) / 1000, media: Math.round(media * 1000) / 1000, caro: media > 0 && p >= media * 1.5 };
+      });
+    }
+  });
+
+  dash.calc('por_ceme', {
+    inputs: ['faturas'],
+    title: 'Gasto por CEME',
+    description: 'Valor, kWh e número de carregamentos somados por CEME.',
+    fn: (faturas) => {
+      const m = new Map();
+      for (const f of faturas) {
+        const k = String(f.ceme || 'Sem CEME').trim();
+        const a = m.get(k) || { ceme: k, valor: 0, kwh: 0, carregamentos: 0 };
+        a.valor += Number(f.valor) || 0;
+        a.kwh += Number(f.kwh) || 0;
+        a.carregamentos += 1;
+        m.set(k, a);
+      }
+      return [...m.values()]
+        .sort((a, b) => b.valor - a.valor)
+        .map((a) => ({ ...a, valor: Math.round(a.valor * 100) / 100, kwh: Math.round(a.kwh * 10) / 10 }));
+    }
+  });
+
+  const eur = new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' });
+  const n2 = new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const eur3 = new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  const n1 = new Intl.NumberFormat('pt-PT', { maximumFractionDigits: 1 });
+  const fmtMes = (s) => new Date(s + '-01T00:00:00Z').toLocaleDateString('pt-PT', { month: 'short', timeZone: 'UTC' }).replace('.', '');
+  const fmtData = (s) => { const d = String(s).slice(0, 10).split('-'); return d.length === 3 ? `${d[2]}/${d[1]}/${d[0]}` : String(s); };
+
+  // Separadores
+  document.querySelectorAll('.ev-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const alvo = btn.dataset.tab;
+      document.querySelectorAll('.ev-tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === alvo)));
+      document.querySelectorAll('[data-panel]').forEach((p) => { p.hidden = p.dataset.panel !== alvo; });
+    });
+  });
+
+  dash.onData(() => {
+    const f = dash.data('faturas');
+    const temDados = f.status === 'ok' && f.data.length > 0;
+    document.querySelectorAll('[data-take="vazio"]').forEach((el) => { el.hidden = !(f.status === 'ok' && !temDados); });
+    document.querySelectorAll('[data-take="cheio"]').forEach((el) => { el.hidden = !temDados; });
+  });
+
+
+  // Mês escolhido (setas)
+  const addMes = (s, k) => { const [y, m] = s.split('-').map(Number); return new Date(Date.UTC(y, m - 1 + k, 1)).toISOString().slice(0, 7); };
+  const hojeMes = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; })();
+  window.evSel = window.evSel || hojeMes;
+  const mesesDados = () => { const r = dash.data('por_mes'); return r.status === 'ok' ? r.data : []; };
+  const limites = () => { const ms = mesesDados(); return { min: ms.length ? (ms[0].mes < hojeMes ? ms[0].mes : hojeMes) : hojeMes, max: hojeMes }; };
+  const linhaSel = () => mesesDados().find((d) => d.mes === window.evSel) || null;
+  const nomeMes = (s) => new Date(s + '-01T00:00:00Z').toLocaleDateString('pt-PT', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const mesDraws = ['kpi_km100', 'nota_km100', 'kpi_poup', 'nota_poup', 'kpi_media', 'lista_semanas', 'pago_mes', 'kpi_cash', 'mes_nome', 'big_mes', 'barra_mes', 'sub_kwh', 'sub_n', 'kpi_kwh', 'kpi_preco', 'kpi_n', 'graf_mes'];
+  const atualizaSetas = () => {
+    const { min, max } = limites();
+    document.querySelectorAll('[data-nav]').forEach((b) => { b.disabled = b.dataset.nav === '-1' ? window.evSel <= min : window.evSel >= max; });
+  };
+  const irPara = (mes) => {
+    const { min, max } = limites();
+    window.evSel = mes < min ? min : mes > max ? max : mes;
+    mesDraws.forEach((n) => dash.draw(n));
+    atualizaSetas();
+  };
+  document.querySelectorAll('[data-nav]').forEach((b) => b.addEventListener('click', () => irPara(addMes(window.evSel, Number(b.dataset.nav)))));
+  dash.onData(atualizaSetas);
+
+  const mesDraw = (name, field, fmt, vazio) => dash.draw(name, (el) => {
+    const r = dash.data('por_mes');
+    el.classList.toggle('dash-skeleton', r.status === 'loading');
+    if (r.status !== 'ok') { el.textContent = '—'; return; }
+    const row = linhaSel();
+    el.setAttribute('data-where', 'mes=' + window.evSel);
+    const v = row ? row[field] : null;
+    el.textContent = v === null || v === undefined ? vazio : fmt(v);
+  });
+  mesDraw('kpi_kwh', 'kwh', (v) => n1.format(v) + ' kWh', '0 kWh');
+  mesDraw('kpi_preco', 'preco', (v) => eur3.format(v), '—');
+  mesDraw('kpi_n', 'carregamentos', (v) => String(v), '0');
+  mesDraw('kpi_cash', 'cashback', (v) => eur.format(v), eur.format(0));
+  mesDraw('pago_mes', 'pago', (v) => eur.format(v), eur.format(0));
+  mesDraw('sub_kwh', 'kwh', (v) => n1.format(v) + ' kWh', '0 kWh');
+  mesDraw('sub_n', 'carregamentos', (v) => v === 1 ? '1 carregamento' : `${v} carregamentos`, 'Sem carregamentos');
+
+  dash.draw('mes_nome', (el) => {
+    el.textContent = window.evSel === hojeMes ? 'Gasto este mês' : 'Gasto em ' + nomeMes(window.evSel);
+  });
+
+  dash.draw('big_mes', (el) => {
+    const r = dash.data('por_mes');
+    el.classList.toggle('dash-skeleton', r.status === 'loading');
+    if (r.status !== 'ok') { el.textContent = '—'; return; }
+    const row = linhaSel();
+    el.setAttribute('data-where', 'mes=' + window.evSel);
+    const num = document.createElement('span'); num.textContent = n2.format(row ? row.valor : 0);
+    const u = document.createElement('span'); u.className = 'ev-unit'; u.textContent = '€';
+    el.replaceChildren(num, u);
+  });
+
+  dash.draw('barra_mes', (el) => {
+    const row = linhaSel();
+    const max = d3.max(mesesDados(), (d) => d.valor) || 0;
+    el.setAttribute('data-where', 'mes=' + window.evSel);
+    el.style.width = row && max ? Math.min(100, 100 * row.valor / max) + '%' : '0%';
+  });
+
+  dash.draw('kpi_media', (el) => {
+    const r = dash.data('media_semanal');
+    el.classList.toggle('dash-skeleton', r.status === 'loading');
+    if (r.status !== 'ok') { el.textContent = '—'; return; }
+    el.setAttribute('data-where', 'mes=' + window.evSel);
+    const row = r.data.find((d) => d.mes === window.evSel);
+    el.textContent = eur.format(row ? row.media : 0);
+  });
+
+  dash.draw('lista_semanas', (el) => {
+    const r = dash.data('semanas');
+    el.replaceChildren();
+    if (r.status !== 'ok') return;
+    const ws = r.data.filter((w) => w.mes === window.evSel);
+    const max = d3.max(ws, (w) => w.valor) || 1;
+    const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+    const dm = (iso) => `${Number(iso.slice(8, 10))} ${MESES[Number(iso.slice(5, 7)) - 1]}`;
+    const hoje = new Date().toISOString().slice(0, 10);
+    for (const w of ws) {
+      const row = document.createElement('div'); row.className = 'ev-wk' + (hoje >= w.inicio && hoje <= w.fim ? ' ev-now' : '');
+      const l = document.createElement('span');
+      l.textContent = w.inicio.slice(5, 7) === w.fim.slice(5, 7) ? `${Number(w.inicio.slice(8, 10))}–${dm(w.fim)}` : `${dm(w.inicio)} – ${dm(w.fim)}`;
+      const bar = document.createElement('div'); bar.className = 'ev-wk-bar';
+      const fill = document.createElement('div'); fill.style.width = (100 * w.valor / max) + '%'; bar.append(fill);
+      const v = document.createElement('span'); v.className = 'ev-wk-v'; v.textContent = eur.format(w.valor);
+      row.append(l, bar, v); el.append(row);
+    }
+  });
+
+  // Lista de semanas que abre ao tocar no cartão
+  const fecharSemanas = () => document.querySelectorAll('.ev-tile-click').forEach((t) => {
+    t.setAttribute('aria-expanded', 'false');
+    t.querySelectorAll('.ev-drop').forEach((d) => { d.hidden = true; });
+  });
+  document.querySelectorAll('.ev-tile-click').forEach((t) => {
+    const alternar = () => {
+      const abrir = t.getAttribute('aria-expanded') !== 'true';
+      fecharSemanas();
+      if (abrir) { t.setAttribute('aria-expanded', 'true'); t.querySelectorAll('.ev-drop').forEach((d) => { d.hidden = false; }); }
+    };
+    t.addEventListener('click', (ev) => { if (!ev.target.closest('.ev-drop')) alternar(); });
+    t.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); alternar(); } if (ev.key === 'Escape') fecharSemanas(); });
+  });
+  document.addEventListener('click', (ev) => { if (!ev.target.closest('.ev-tile-click')) fecharSemanas(); });
+
+  const linhaKm = () => { const r = dash.data('custo_km'); return r.status === 'ok' ? r.data.find((d) => d.mes === window.evSel) || null : null; };
+  const kmDraw = (name, fn) => dash.draw(name, (el) => {
+    const r = dash.data('custo_km');
+    el.classList.toggle('dash-skeleton', r.status === 'loading');
+    if (r.status !== 'ok') { el.textContent = '—'; return; }
+    el.setAttribute('data-where', 'mes=' + window.evSel);
+    fn(el, linhaKm());
+  });
+  kmDraw('kpi_km100', (el, row) => { el.textContent = row ? eur.format(row.custo_100km) : '—'; });
+  kmDraw('nota_km100', (el, row) => { el.textContent = row ? `${new Intl.NumberFormat('pt-PT').format(row.km)} km` + (window.evSel === hojeMes ? ' até agora · mês em curso' : ' no mês') : 'Faltam os km deste mês'; });
+  kmDraw('kpi_poup', (el, row) => {
+    el.classList.remove('ev-neg');
+    if (!row || row.poupanca === null) { el.textContent = '—'; return; }
+    el.textContent = (row.poupanca >= 0 ? '+' : '−') + eur.format(Math.abs(row.poupanca));
+    el.classList.toggle('ev-neg', row.poupanca < 0);
+  });
+  kmDraw('nota_poup', (el, row) => { el.textContent = row && row.gasoleo_eur !== null ? `No Focus seriam ${eur.format(row.gasoleo_eur)}` : 'Faltam os km deste mês'; });
+
+  dash.draw('estado_chip', (el) => {
+    const r = dash.data('estado');
+    if (r.status !== 'ok' || !r.data.length) { el.textContent = '—'; return; }
+    const e = [...r.data].sort((a, b) => String(a.atualizado).localeCompare(String(b.atualizado))).pop();
+    const d = new Date(e.atualizado);
+    const quando = d.toLocaleString('pt-PT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Lisbon' }).replace('.', '');
+    const n = Number(e.novas) || 0;
+    el.textContent = `Atualizado ${quando}` + (n ? ` · ${n} ${n === 1 ? 'nova' : 'novas'}` : '');
+  });
+
+  const ultimaLeitura = () => { const r = dash.data('odometro'); return r.status === 'ok' && r.data.length ? [...r.data].sort((a, b) => String(a.data).localeCompare(String(b.data))).pop() : null; };
+  dash.draw('odometro', (el) => {
+    const o = ultimaLeitura();
+    el.textContent = o ? `${new Intl.NumberFormat('pt-PT').format(Number(o.km))} km` : '—';
+    if (o) el.setAttribute('data-where', 'data=' + o.data);
+  });
+
+  const estado = (el, r, vazio) => {
+    el.replaceChildren();
+    el.classList.toggle('dash-skeleton', r.status === 'loading');
+    if (r.status === 'error' || r.status === 'connect') {
+      const p = document.createElement('div'); p.className = 'ev-fail'; p.textContent = 'Failed to load'; el.append(p); return false;
+    }
+    if (r.status !== 'ok') return false;
+    if (!r.data.length) {
+      const p = document.createElement('div'); p.className = 'ev-muted-line'; p.textContent = vazio; el.append(p); return false;
+    }
+    return true;
+  };
+
+  let animado = false;
+  dash.draw('graf_mes', (el) => {
+    const r = dash.data('por_mes');
+    if (!estado(el, r, 'Aparece com a primeira fatura')) return;
+    const rows = r.data.slice(-12);
+    const W = Math.max(el.clientWidth || 600, 260), H = 240, mt = 14, mb = 30, mr = 6;
+    const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).style('display', 'block');
+    const defs = svg.append('defs');
+    const g1 = defs.append('linearGradient').attr('id', 'evBarT').attr('x1', 0).attr('y1', 0).attr('x2', 0).attr('y2', 1);
+    g1.append('stop').attr('offset', 0).attr('stop-color', '#5FE3D0');
+    g1.append('stop').attr('offset', 1).attr('stop-color', '#1A9E86').attr('stop-opacity', .55);
+    const g2 = defs.append('linearGradient').attr('id', 'evBarL').attr('x1', 0).attr('y1', 0).attr('x2', 0).attr('y2', 1);
+    g2.append('stop').attr('offset', 0).attr('stop-color', '#B5E46A');
+    g2.append('stop').attr('offset', 1).attr('stop-color', '#8DC63F').attr('stop-opacity', .7);
+    const glow = defs.append('filter').attr('id', 'evBarGlow').attr('x', '-50%').attr('y', '-20%').attr('width', '200%').attr('height', '140%');
+    glow.append('feGaussianBlur').attr('stdDeviation', 6);
+
+    const y = d3.scaleLinear([0, d3.max(rows, (d) => d.valor) || 1], [H - mb, mt]).nice();
+    const yt = y.ticks(4);
+    const gy = svg.append('g').attr('fill', '#8D99A6').attr('font-size', 12);
+    const labels = gy.selectAll('text').data(yt).join('text').text((d) => d3.format('d')(d) + ' €');
+    let ml = 0; labels.each(function () { ml = Math.max(ml, this.getComputedTextLength()); }); ml += 12;
+    labels.attr('x', ml - 10).attr('y', (d) => y(d)).attr('dy', '0.32em').attr('text-anchor', 'end');
+    svg.insert('g', 'g').selectAll('line').data(yt).join('line')
+      .attr('x1', ml).attr('x2', W - mr).attr('y1', (d) => y(d)).attr('y2', (d) => y(d))
+      .attr('stroke', 'rgba(255,255,255,.07)').attr('stroke-width', 1);
+    const x = d3.scaleBand(rows.map((d) => d.mes), [ml, W - mr]).padding(0.35);
+    const bw = Math.min(x.bandwidth(), 34);
+    const bx = (d) => x(d.mes) + (x.bandwidth() - bw) / 2;
+    const step = Math.ceil(rows.length / Math.max(1, Math.floor((W - ml) / 44)));
+    svg.append('g').attr('fill', '#8D99A6').attr('font-size', 12)
+      .selectAll('text').data(rows.filter((d, i) => (rows.length - 1 - i) % step === 0)).join('text')
+      .attr('x', (d) => x(d.mes) + x.bandwidth() / 2).attr('y', H - 8).attr('text-anchor', 'middle').text((d) => fmtMes(d.mes));
+    const ultimo = window.evSel;
+    const h = (d) => Math.max(0, y(0) - y(d.valor));
+    svg.append('g').selectAll('rect').data(rows.filter((d) => d.mes === ultimo)).join('rect')
+      .attr('x', bx).attr('width', bw).attr('y', (d) => y(d.valor)).attr('height', h)
+      .attr('rx', 8).attr('fill', '#8DC63F').attr('opacity', .55).attr('filter', 'url(#evBarGlow)');
+    const bars = svg.append('g').selectAll('rect').data(rows).join('rect')
+      .attr('x', bx).attr('width', bw).attr('y', (d) => y(d.valor)).attr('height', h)
+      .attr('rx', 8).attr('fill', (d) => d.mes === ultimo ? 'url(#evBarL)' : 'url(#evBarT)').style('cursor', 'pointer')
+      .on('click', (ev, d) => irPara(d.mes));
+    svg.append('g').selectAll('g').data(rows).join('g').each(function (d) {
+      const n = Math.floor(h(d) / 14);
+      d3.select(this).selectAll('line').data(d3.range(1, n)).join('line')
+        .attr('x1', bx(d) + bw / 2).attr('x2', bx(d) + bw / 2)
+        .attr('y1', (k) => y(0) - k * 14 - 3).attr('y2', (k) => y(0) - k * 14 + 3)
+        .attr('stroke', 'rgba(255,255,255,.35)').attr('stroke-width', 1.5).attr('stroke-linecap', 'round').style('pointer-events', 'none');
+    });
+    if (!animado) { bars.attr('class', 'ev-bar-anim'); animado = true; }
+    const tip = document.createElement('div'); tip.className = 'ev-tip'; tip.hidden = true; el.append(tip);
+    bars.on('pointerenter pointermove', (ev, d) => {
+      tip.replaceChildren();
+      const a = document.createElement('div'); a.className = 'ev-tip-d';
+      a.textContent = new Date(d.mes + '-01T00:00:00Z').toLocaleDateString('pt-PT', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+      const b = document.createElement('div'); b.textContent = `${eur.format(d.valor)} · ${n1.format(d.kwh)} kWh`;
+      tip.append(a, b); tip.hidden = false;
+      const [px, py] = d3.pointer(ev, el);
+      const tw = tip.offsetWidth;
+      tip.style.left = Math.min(Math.max(0, px - tw / 2), el.clientWidth - tw) + 'px';
+      tip.style.top = Math.max(0, py - tip.offsetHeight - 12) + 'px';
+      d3.select(ev.currentTarget).attr('opacity', .8);
+    }).on('pointerleave', (ev) => { tip.hidden = true; d3.select(ev.currentTarget).attr('opacity', null); });
+  });
+
+  window.evCemeAberto = window.evCemeAberto || null;
+  dash.draw('graf_ceme', (el) => {
+    const r = dash.data('por_ceme');
+    if (!estado(el, r, 'Aparece com a primeira fatura')) return;
+    const cm = dash.data('ceme_mes');
+    const total = d3.sum(r.data, (d) => d.valor) || 1;
+    const max = d3.max(r.data, (d) => d.valor) || 1;
+    for (const d of r.data) {
+      const aberto = window.evCemeAberto === d.ceme;
+      const row = document.createElement('div'); row.className = 'ev-crow ev-crow-btn';
+      row.setAttribute('role', 'button'); row.tabIndex = 0; row.setAttribute('aria-expanded', String(aberto));
+      const nm = document.createElement('span'); nm.className = 'ev-cname'; nm.textContent = d.ceme;
+      const v = document.createElement('span'); v.className = 'ev-cval'; v.textContent = eur.format(d.valor);
+      const meta = document.createElement('span'); meta.className = 'ev-cmeta';
+      meta.textContent = `${d.carregamentos} ${d.carregamentos === 1 ? 'carregamento' : 'carregamentos'} · ${n1.format(d.kwh)} kWh`;
+      const pct = document.createElement('span'); pct.className = 'ev-cpct';
+      const chev = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); chev.setAttribute('viewBox', '0 0 24 24'); chev.setAttribute('class', 'ev-cchev');
+      const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', 'M6 9l6 6 6-6'); chev.append(p);
+      pct.append(document.createTextNode(d3.format('.0%')(d.valor / total) + ' '), chev);
+      const bar = document.createElement('div'); bar.className = 'ev-cbar';
+      const fill = document.createElement('div'); fill.style.width = (100 * d.valor / max) + '%'; bar.append(fill);
+      row.append(nm, v, meta, pct, bar);
+      const alternar = () => { window.evCemeAberto = aberto ? null : d.ceme; dash.draw('graf_ceme'); };
+      row.addEventListener('click', alternar);
+      row.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); alternar(); } });
+      el.append(row);
+      if (aberto) {
+        const box = document.createElement('div'); box.className = 'ev-cmeses';
+        const ms = (cm.status === 'ok' ? cm.data : []).filter((x) => x.ceme === d.ceme).sort((a, b) => a.mes.localeCompare(b.mes));
+        const mmax = d3.max(ms, (x) => x.valor) || 1;
+        const t = document.createElement('p'); t.className = 'ev-drop-t'; t.textContent = 'Por mês · o mês em que gastaste mais a verde'; box.append(t);
+        ms.forEach((x) => {
+          const w = document.createElement('div'); w.className = 'ev-wk' + (x.valor === mmax ? ' ev-now' : '');
+          const l = document.createElement('span'); l.textContent = nomeMes(x.mes);
+          const b2 = document.createElement('div'); b2.className = 'ev-wk-bar';
+          const f2 = document.createElement('div'); f2.style.width = (100 * x.valor / mmax) + '%'; b2.append(f2);
+          const v2 = document.createElement('span'); v2.className = 'ev-wk-v'; v2.textContent = `${eur.format(x.valor)} · ${x.carregamentos}×`;
+          w.append(l, b2, v2); box.append(w);
+        });
+        el.append(box);
+      }
+    }
+  });
+
+  dash.draw('tabela', (tb) => {
+    const r = dash.data('faturas');
+    tb.replaceChildren();
+    if (r.status !== 'ok') return;
+    const rows = [...r.data].sort((a, b) => String(b.data).localeCompare(String(a.data)));
+    const ra = dash.data('alertas');
+    const alertasPorId = new Map((ra.status === 'ok' ? ra.data : []).map((x) => [String(x.id), x]));
+    for (const f of rows) {
+      const tr = document.createElement('tr'); tr.dataset.key = String(f.id);
+      const al = alertasPorId.get(String(f.id));
+      if (al && al.caro) tr.className = 'ev-caro';
+      const cells = [fmtData(f.data), String(f.ceme), n1.format(Number(f.kwh) || 0), eur.format(Number(f.valor) || 0), Number(f.cashback) ? eur.format(Number(f.cashback)) : '—'];
+      cells.forEach((t, i) => {
+        const td = document.createElement('td'); td.textContent = t; if (i >= 2) td.className = 'ev-num';
+        if (i === 1 && al && al.caro) { const b = document.createElement('span'); b.className = 'ev-badge'; b.textContent = `Caro · ${eur3.format(al.preco_kwh)}/kWh`; td.append(b); }
+        tr.append(td);
+      });
+      tb.append(tr);
+    }
+  });
+</script>
+
+<p class="ev-foot">Dados das faturas de carregamento · atualizado automaticamente</p>
+</div>
+<script>dash.start();</script>
+</body>
+</html>
