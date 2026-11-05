@@ -12,6 +12,7 @@
   body { font-family: var(--font-anthropic-sans); -webkit-font-smoothing: antialiased; }
   #dash-root { max-width: 760px; margin: 0 auto; padding: 12px 12px 32px; box-sizing: border-box; }
   #dash-root *, #dash-root *::before, #dash-root *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   .dash-skeleton { color: transparent !important; background: rgba(255,255,255,.06); border-radius: 8px; }
   .ev-foot { text-align: center; color: #5d6873; font-size: 12px; margin-top: 18px; }
 </style>
@@ -314,12 +315,7 @@ window.dash = (() => {
     </div>
   </section>
 
-  <div>
-    <div class="ev-tabs" role="tablist">
-      <button class="ev-tab" role="tab" aria-selected="true" data-tab="analise">Análise</button>
-      <button class="ev-tab" role="tab" aria-selected="false" data-tab="faturas">Faturas</button>
-    </div>
-  </div>
+  
 
   <section class="ev-panel" data-panel="analise" id="analise">
     <div class="ev-card" id="por-mes">
@@ -334,26 +330,7 @@ window.dash = (() => {
     </div>
   </section>
 
-  <section class="ev-panel" data-panel="faturas" id="faturas" hidden>
-    <div class="ev-card">
-      <h2 class="ev-h">Todas as faturas</h2>
-      <p class="ev-note">Mais recentes primeiro · a vermelho os carregamentos com €/kWh pelo menos 50% acima da tua média</p>
-      <div class="ev-tablebox">
-        <table class="ev-table" data-source="faturas alertas" data-row-key="id">
-          <thead>
-            <tr>
-              <th data-field="data">Data</th>
-              <th data-field="ceme">CEME</th>
-              <th data-field="kwh" class="ev-num">kWh</th>
-              <th data-field="valor" class="ev-num">Valor</th>
-              <th data-field="cashback" class="ev-num">Cashback</th>
-            </tr>
-          </thead>
-          <tbody data-draw="tabela"></tbody>
-        </table>
-      </div>
-    </div>
-  </section>
+  
 </div>
 
 <script>
