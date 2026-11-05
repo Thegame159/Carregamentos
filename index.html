@@ -423,7 +423,7 @@ window.dash = (() => {
     inputs: ['km'],
     title: 'Quilómetros por mês',
     description: 'Distância conduzida em cada mês, tal como aparece no relatório de condução da app da Kia.',
-    fn: (km) => km.filter((x) => x.mes && Number(x.km) > 0).map((x) => ({ mes: String(x.mes).slice(0, 7), km: Number(x.km) }))
+    fn: (km) => km.filter((x) => x.mes && Number(x.km) > 0).map((x) => ({ mes: String(x.mes).slice(0, 7), km: Number(x.km), estimado: /^Estimativa/i.test(String(x.fonte || '')) }))
   });
 
   dash.calc('custo_km', {
@@ -439,7 +439,7 @@ window.dash = (() => {
         const valor = p ? (p.pago ?? p.valor) : 0;
         const gas = preco ? (k.km / 100) * CONSUMO_FOCUS * preco : null;
         return {
-          mes: k.mes, km: k.km,
+          mes: k.mes, km: k.km, estimado: !!k.estimado,
           custo_100km: Math.round((valor / k.km) * 10000) / 100,
           gasoleo_eur: gas === null ? null : Math.round(gas * 100) / 100,
           poupanca: gas === null ? null : Math.round((gas - valor) * 100) / 100
@@ -622,7 +622,7 @@ window.dash = (() => {
     fn(el, linhaKm());
   });
   kmDraw('kpi_km100', (el, row) => { el.textContent = row ? eur.format(row.custo_100km) : '—'; });
-  kmDraw('nota_km100', (el, row) => { el.textContent = row ? `${new Intl.NumberFormat('pt-PT').format(row.km)} km` + (window.evSel === hojeMes ? ' até agora · mês em curso' : ' no mês') : 'Faltam os km deste mês'; });
+  kmDraw('nota_km100', (el, row) => { el.textContent = row ? (row.estimado ? '≈ ' : '') + `${new Intl.NumberFormat('pt-PT').format(row.km)} km` + (window.evSel === hojeMes ? ' até agora · mês em curso' : row.estimado ? ' no mês · estimado' : ' no mês') : 'Faltam os km deste mês'; });
   kmDraw('kpi_poup', (el, row) => {
     el.classList.remove('ev-neg');
     if (!row || row.poupanca === null) { el.textContent = '—'; return; }
