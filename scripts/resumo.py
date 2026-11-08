@@ -40,6 +40,9 @@ preco = num(gas[-1]['preco_litro']) if gas else 0.0
 focus = km / 100 * CONSUMO_FOCUS * preco if km else 0.0
 poup = focus - pago if km else None
 
+bat = sorted(ler('bateria.csv'), key=lambda r: r['data_hora']) if os.path.exists(os.path.join(D, 'bateria.csv')) else []
+b = bat[-1] if bat else None
+
 res = {
     'mes': f"{MESES[agora.month - 1]} {agora.year}",
     'gasto': eur(gasto),
@@ -53,6 +56,10 @@ res = {
     'focus': eur(focus) if km else '—',
     'odometro': milhar(num(odo[-1]['km'])) + ' km' if odo else '—',
     'atualizado': agora.strftime('%d/%m %H:%M'),
+    'bateria_pct': int(num(b['pct'])) if b else 0,
+    'bateria': f"{int(num(b['pct']))}% · {int(num(b['autonomia_km']))} km" if b else '—',
+    'bateria_kwh': (f"{num(b['pct']) / 100 * 64:.1f}".replace('.', ',') + ' kWh') if b else '—',
+    'bateria_quando': (b['data_hora'][8:10] + '/' + b['data_hora'][5:7] + ' ' + b['data_hora'][11:16]) if b else '—',
 }
 with open(os.path.join(D, 'resumo.json'), 'w', encoding='utf-8') as f:
     json.dump(res, f, ensure_ascii=False, indent=1)
