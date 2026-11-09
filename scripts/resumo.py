@@ -29,7 +29,7 @@ def milhar(v):
 agora = datetime.now(ZoneInfo('Europe/Lisbon'))
 mes = agora.strftime('%Y-%m')
 fat = [r for r in ler('faturas.csv') if r['data'][:7] == mes]
-gasto = sum(num(r['valor']) for r in fat)
+gasto = sum(num(r['valor']) - min(num(r.get('gems') or 0), num(r['valor'])) for r in fat)
 cash = sum(num(r['cashback']) for r in fat)
 kwh = sum(num(r['kwh']) for r in fat)
 pago = gasto - cash

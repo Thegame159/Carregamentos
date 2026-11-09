@@ -345,6 +345,9 @@ window.dash = (() => {
 </div>
 
 <script>
+  const gemsDe = (f) => Math.min(Number(f.gems) || 0, Number(f.valor) || 0);
+  const valorEf = (f) => (Number(f.valor) || 0) - gemsDe(f);
+  const kwhPago = (f) => { const v = Number(f.valor) || 0, k = Number(f.kwh) || 0; return v > 0 ? k * valorEf(f) / v : k; };
   dash.calc('por_mes', {
     inputs: ['faturas'],
     title: 'Gasto por mês',
@@ -353,9 +356,10 @@ window.dash = (() => {
       const m = new Map();
       for (const f of faturas) {
         const k = String(f.data).slice(0, 7);
-        const a = m.get(k) || { mes: k, valor: 0, kwh: 0, carregamentos: 0, cashback: 0 };
-        a.valor += Number(f.valor) || 0;
+        const a = m.get(k) || { mes: k, valor: 0, kwh: 0, kwh_pago: 0, carregamentos: 0, cashback: 0 };
+        a.valor += valorEf(f);
         a.kwh += Number(f.kwh) || 0;
+        a.kwh_pago += kwhPago(f);
         a.cashback += Number(f.cashback) || 0;
         a.carregamentos += 1;
         m.set(k, a);
@@ -366,10 +370,11 @@ window.dash = (() => {
           mes: a.mes,
           valor: Math.round(a.valor * 100) / 100,
           kwh: Math.round(a.kwh * 10) / 10,
+          kwh_pago: Math.round(a.kwh_pago * 10) / 10,
           carregamentos: a.carregamentos,
           cashback: Math.round(a.cashback * 100) / 100,
           pago: Math.round((a.valor - a.cashback) * 100) / 100,
-          preco: a.kwh > 0 ? Math.round((a.valor / a.kwh) * 1000) / 1000 : null
+          preco: a.kwh_pago > 0 ? Math.round((a.valor / a.kwh_pago) * 1000) / 1000 : null
         }));
     }
   });
@@ -391,7 +396,7 @@ window.dash = (() => {
         const qui = new Date(m); qui.setUTCDate(qui.getUTCDate() + 3);
         const fim = f6.toISOString().slice(0, 10);
         let valor = 0, n = 0;
-        for (const f of faturas) { const d = String(f.data).slice(0, 10); if (d >= ini && d <= fim) { valor += Number(f.valor) || 0; n += 1; } }
+        for (const f of faturas) { const d = String(f.data).slice(0, 10); if (d >= ini && d <= fim) { valor += valorEf(f); n += 1; } }
         out.push({ inicio: ini, fim, mes: qui.toISOString().slice(0, 7), valor: Math.round(valor * 100) / 100, carregamentos: n });
       }
       return out;
@@ -423,7 +428,7 @@ window.dash = (() => {
         const ceme = String(f.ceme || 'Sem CEME').trim(), mes = String(f.data).slice(0, 7);
         const k = ceme + '|' + mes;
         const a = m.get(k) || { ceme, mes, valor: 0, kwh: 0, carregamentos: 0 };
-        a.valor += Number(f.valor) || 0; a.kwh += Number(f.kwh) || 0; a.carregamentos += 1;
+        a.valor += valorEf(f); a.kwh += Number(f.kwh) || 0; a.carregamentos += 1;
         m.set(k, a);
       }
       return [...m.values()].map((a) => ({ ...a, valor: Math.round(a.valor * 100) / 100, kwh: Math.round(a.kwh * 10) / 10 }));
@@ -463,7 +468,8 @@ window.dash = (() => {
     inputs: ['faturas'],
     title: 'Carregamentos caros',
     description: 'Preço por kWh de cada fatura; é caro quando fica 50% ou mais acima do preço médio de todas as faturas.',
-    fn: (faturas) => {
+    fn: (todas) => {
+      const faturas = todas.filter((f) => !gemsDe(f));
       const v = faturas.reduce((s, f) => s + (Number(f.valor) || 0), 0);
       const k = faturas.reduce((s, f) => s + (Number(f.kwh) || 0), 0);
       const media = k > 0 ? v / k : 0;
@@ -483,7 +489,7 @@ window.dash = (() => {
       for (const f of faturas) {
         const k = String(f.ceme || 'Sem CEME').trim();
         const a = m.get(k) || { ceme: k, valor: 0, kwh: 0, carregamentos: 0 };
-        a.valor += Number(f.valor) || 0;
+        a.valor += valorEf(f);
         a.kwh += Number(f.kwh) || 0;
         a.carregamentos += 1;
         m.set(k, a);
@@ -554,13 +560,13 @@ window.dash = (() => {
     const pm = dash.data('por_mes'); el.classList.toggle('dash-skeleton', pm.status === 'loading');
     el.setAttribute('data-where', 'mes=' + window.evSel);
     const m = pm.status === 'ok' ? pm.data.find((x) => x.mes === window.evSel) : null;
-    el.textContent = m && m.kwh ? eur3.format((m.pago ?? m.valor) / m.kwh) : '—';
+    el.textContent = m && (m.kwh_pago ?? m.kwh) ? eur3.format((m.pago ?? m.valor) / (m.kwh_pago ?? m.kwh)) : '—';
   });
   dash.draw('nota_preco', (el) => {
     const pm = dash.data('por_mes');
     el.setAttribute('data-where', 'mes=' + window.evSel);
     const m = pm.status === 'ok' ? pm.data.find((x) => x.mes === window.evSel) : null;
-    el.textContent = m && m.kwh ? `Por kWh · faturado ${eur3.format(m.valor / m.kwh)}` : 'Por kWh, no mês escolhido';
+    el.textContent = m && m.kwh ? `Por kWh · faturado ${eur3.format(m.valor / (m.kwh_pago || m.kwh))}` : 'Por kWh, no mês escolhido';
   });
   mesDraw('kpi_n', 'carregamentos', (v) => String(v), '0');
   mesDraw('kpi_cash', 'cashback', (v) => eur.format(v), eur.format(0));
@@ -671,7 +677,7 @@ window.dash = (() => {
     fn(el, linhaKm());
   });
   kmDraw('kpi_km100', (el, row) => { el.textContent = row ? eur.format(row.custo_100km) : '—'; });
-  const eurKwhSel = () => { const pm = dash.data('por_mes'); const m = pm.status === 'ok' ? pm.data.find((x) => x.mes === window.evSel) : null; return m && m.kwh ? (m.pago ?? m.valor) / m.kwh : null; };
+  const eurKwhSel = () => { const pm = dash.data('por_mes'); const m = pm.status === 'ok' ? pm.data.find((x) => x.mes === window.evSel) : null; return m && (m.kwh_pago ?? m.kwh) ? (m.pago ?? m.valor) / (m.kwh_pago ?? m.kwh) : null; };
   const consumoAtual = () => {
     const r = dash.data('bateria');
     const rows = r.status === 'ok' ? [...r.data].filter((d) => Number(d.consumo) > 0).sort((a, b) => String(a.data_hora).localeCompare(String(b.data_hora))) : [];
