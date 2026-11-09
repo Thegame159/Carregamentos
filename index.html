@@ -117,6 +117,12 @@ window.dash = (() => {
   .ev-tick { position: absolute; top: -7px; width: 2px; height: 21px; border-radius: 1px; background: rgba(255,255,255,.85); transform: translateX(-1px); transition: left .9s cubic-bezier(.2,.8,.2,1); }
   .ev-ref { position: absolute; top: 16px; transform: translateX(-50%); font-size: .68rem; color: #cfd8da; white-space: nowrap; letter-spacing: .02em; }
   .ev-meter { margin-bottom: 14px; }
+  .ev-tbar { margin-top: 12px; min-height: 26px; }
+  .ev-tbar-t { height: 6px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
+  .ev-tbar-f { height: 100%; border-radius: 3px; background: var(--ev-lime); box-shadow: 0 0 8px rgba(141,198,63,.6); transition: width .9s cubic-bezier(.2,.8,.2,1); }
+  .ev-tbar-c .ev-tbar-f { background: #5FE3D0; box-shadow: 0 0 8px rgba(95,227,208,.6); }
+  .ev-tbar-l { display: flex; justify-content: space-between; gap: 8px; font-size: .74rem; color: var(--ev-muted); margin-top: 6px; white-space: nowrap; }
+  .ev-tbar-l b { color: var(--ev-text, #fff); font-weight: 600; }
   .ev-fill.ev-over { background: linear-gradient(90deg, var(--ev-lime) var(--ev-corte), #F5A623 var(--ev-corte)); box-shadow: 0 0 14px rgba(245,166,35,.6); }
   .ev-fill { height: 100%; width: 0; background: var(--ev-lime); border-radius: 4px; box-shadow: 0 0 14px rgba(141,198,63,.7); transition: width .9s cubic-bezier(.2,.8,.2,1); }
   .ev-bolt { width: 18px; height: 18px; fill: rgba(255,255,255,.45); }
@@ -292,12 +298,14 @@ window.dash = (() => {
       <p class="ev-tile-t">Consumo €/100 km</p>
       <p class="ev-tile-v dash-skeleton" data-draw="kpi_km100" data-source="custo_km" data-field="custo_100km">—</p>
       <p class="ev-tile-n" data-draw="nota_km100" data-source="custo_km" data-field="km">—</p>
+      <div class="ev-tbar" data-draw="bar_bat" data-source="bateria"></div>
       <svg class="ev-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M6 15l3-8h6l3 8M9 11h6"/></svg>
     </div>
     <div class="ev-tile ev-tile-cons" id="t-cons100">
       <p class="ev-tile-t">kWh (€)/100 km</p>
       <p class="ev-tile-v dash-skeleton" data-draw="kpi_cons100" data-source="por_mes">—</p>
       <p class="ev-tile-n" data-draw="nota_cons100" data-source="por_mes">—</p>
+      <div class="ev-tbar ev-tbar-c" data-draw="bar_gasta" data-source="por_mes custo_km"></div>
       <svg class="ev-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9M12 12l6-6M15 3h6v6"/></svg>
     </div>
     <div class="ev-tile ev-tile-poup" id="t-poupanca">
@@ -532,7 +540,7 @@ window.dash = (() => {
   const limites = () => { const ms = mesesDados(); return { min: ms.length ? (ms[0].mes < hojeMes ? ms[0].mes : hojeMes) : hojeMes, max: hojeMes }; };
   const linhaSel = () => mesesDados().find((d) => d.mes === window.evSel) || null;
   const nomeMes = (s) => new Date(s + '-01T00:00:00Z').toLocaleDateString('pt-PT', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-  const mesDraws = ['kpi_km100', 'nota_km100', 'kpi_cons100', 'nota_cons100', 'kpi_poup', 'nota_poup', 'kpi_media', 'lista_semanas', 'pago_mes', 'kpi_cash', 'mes_nome', 'big_mes', 'barra_mes', 'sub_kwh', 'sub_n', 'kpi_kwh', 'kpi_preco', 'nota_preco', 'kpi_n', 'graf_mes'];
+  const mesDraws = ['kpi_km100', 'nota_km100', 'kpi_cons100', 'nota_cons100', 'bar_gasta', 'kpi_poup', 'nota_poup', 'kpi_media', 'lista_semanas', 'pago_mes', 'kpi_cash', 'mes_nome', 'big_mes', 'barra_mes', 'sub_kwh', 'sub_n', 'kpi_kwh', 'kpi_preco', 'nota_preco', 'kpi_n', 'graf_mes'];
   const atualizaSetas = () => {
     const { min, max } = limites();
     document.querySelectorAll('[data-nav]').forEach((b) => { b.disabled = b.dataset.nav === '-1' ? window.evSel <= min : window.evSel >= max; });
@@ -685,6 +693,31 @@ window.dash = (() => {
     return u ? { v: Number(u.consumo), quando: `${Number(String(u.data_hora).slice(8, 10))}/${Number(String(u.data_hora).slice(5, 7))}` } : { v: 11.9, quando: null };
   };
   dash.onData(() => { dash.draw('kpi_cons100'); dash.draw('nota_cons100'); });
+  const tbar = (el, pct, esq, dir) => {
+    const t = document.createElement('div'); t.className = 'ev-tbar-t';
+    const f = document.createElement('div'); f.className = 'ev-tbar-f'; f.style.width = Math.max(0, Math.min(100, pct)) + '%'; t.append(f);
+    const l = document.createElement('div'); l.className = 'ev-tbar-l';
+    const a = document.createElement('span'); a.append(...esq); const b = document.createElement('span'); b.textContent = dir; l.append(a, b);
+    el.replaceChildren(t, l);
+  };
+  const negrito = (txt) => { const b = document.createElement('b'); b.textContent = txt; return b; };
+  dash.draw('bar_bat', (el) => {
+    const r = dash.data('bateria');
+    const rows = r.status === 'ok' ? [...r.data].filter((d) => Number(d.pct) > 0).sort((a, b) => String(a.data_hora).localeCompare(String(b.data_hora))) : [];
+    const u = rows.pop(); if (!u) { el.replaceChildren(); return; }
+    const pct = Number(u.pct), kwh = Math.round(pct / 100 * 64);
+    tbar(el, pct, [negrito(pct + '%'), ` · ${kwh} kWh`], Number(u.autonomia_km) ? `${Number(u.autonomia_km)} km` : '');
+  });
+  dash.draw('bar_gasta', (el) => {
+    el.setAttribute('data-where', 'mes=' + window.evSel);
+    const pm = dash.data('por_mes'), ck = dash.data('custo_km');
+    const m = pm.status === 'ok' ? pm.data.find((x) => x.mes === window.evSel) : null;
+    const k = ck.status === 'ok' ? ck.data.find((x) => x.mes === window.evSel) : null;
+    if (!m || !k || !m.kwh) { el.replaceChildren(); return; }
+    const gasta = k.km * consumoAtual().v / 100;
+    tbar(el, 100 * gasta / m.kwh, [negrito(Math.round(gasta) + ' kWh'), ' gastos'], `de ${String(m.kwh).replace('.', ',')}`);
+  });
+  dash.onData(() => { dash.draw('bar_bat'); dash.draw('bar_gasta'); });
   dash.draw('kpi_cons100', (el) => {
     const pm = dash.data('por_mes'); el.classList.toggle('dash-skeleton', pm.status === 'loading');
     el.setAttribute('data-where', 'mes=' + window.evSel);
