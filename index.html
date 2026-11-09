@@ -122,6 +122,8 @@ window.dash = (() => {
   .ev-sub i { font-style: normal; color: var(--ev-muted); margin: 0 .4em; }
   .ev-tile#t-cash { border-color: rgba(141,198,63,.55); background: linear-gradient(160deg, rgba(141,198,63,.14), rgba(20,31,41,.6) 60%); }
   .ev .ev-cash { color: var(--ev-lime); }
+  [data-draw=kpi_km100] { display: flex; flex-wrap: nowrap; align-items: flex-start; }
+  @media (max-width: 480px) { .ev-duo-2 { margin-left: 8px; padding-left: 7px; } .ev-duo span:first-child { font-size: 1.05rem; white-space: nowrap; } .ev-duo small { font-size: .62rem; } }
   .ev .ev-paidv { color: var(--ev-fg); font-weight: 600; font-variant-numeric: tabular-nums; }
   .ev .ev-odo { font-size: .78rem; opacity: .75; }
   .ev-hint { font-size: .85rem; color: var(--ev-muted); }
@@ -172,6 +174,9 @@ window.dash = (() => {
   .ev-tile-t { font-weight: 600; font-size: 1rem; }
   .ev-tile-v { font-size: 1.5rem; margin-top: 6px; font-variant-numeric: tabular-nums; }
   .ev-tile-n { color: var(--ev-muted); font-size: .85rem; margin-top: 2px; }
+  .ev-duo { display: inline-flex; flex-direction: column; line-height: 1.1; }
+  .ev-duo small { white-space: nowrap; font-size: .7rem; color: var(--ev-muted); letter-spacing: .02em; margin-top: 2px; }
+  .ev-duo-2 { margin-left: 16px; padding-left: 14px; border-left: 1px solid rgba(255,255,255,.15); color: var(--ev-lime); }
   .ev-ico { margin-top: auto; align-self: flex-end; width: 30px; height: 30px; fill: none; stroke: var(--ev-fg); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
   .ev-tile { position: relative; }
@@ -653,7 +658,14 @@ window.dash = (() => {
     el.setAttribute('data-where', 'mes=' + window.evSel);
     fn(el, linhaKm());
   });
-  kmDraw('kpi_km100', (el, row) => { el.textContent = row ? eur.format(row.custo_100km) : '—'; });
+  kmDraw('kpi_km100', (el, row) => {
+    const pm = dash.data('por_mes'); const m = pm.status === 'ok' ? pm.data.find((x) => x.mes === window.evSel) : null;
+    const eurKwh = m && m.kwh ? (m.pago ?? m.valor) / m.kwh : null;
+    const bloco = (v, lbl, cls) => { const d = document.createElement('span'); d.className = 'ev-duo ' + cls; const a = document.createElement('span'); a.textContent = v; const b = document.createElement('small'); b.textContent = lbl; d.append(a, b); return d; };
+    el.replaceChildren(
+      bloco(row ? eur.format(row.custo_100km) : '—', 'pelos km', ''),
+      bloco(eurKwh ? eur.format(eurKwh * 11.9) : '—', 'consumo', 'ev-duo-2'));
+  });
   kmDraw('nota_km100', (el, row) => { el.textContent = row ? (row.estimado ? '≈ ' : '') + `${new Intl.NumberFormat('pt-PT').format(row.km)} km` + (window.evSel === hojeMes ? ' até agora · mês em curso' : row.estimado ? ' no mês · estimado' : ' no mês') : 'Faltam os km deste mês'; });
   kmDraw('kpi_poup', (el, row) => {
     el.classList.remove('ev-neg');
