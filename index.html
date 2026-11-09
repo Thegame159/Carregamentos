@@ -695,7 +695,7 @@ window.dash = (() => {
     el.textContent = (row.poupanca >= 0 ? '+' : '−') + eur.format(Math.abs(row.poupanca));
     el.classList.toggle('ev-neg', row.poupanca < 0);
   });
-  kmDraw('nota_poup', (el, row) => { el.textContent = row && row.gasoleo_eur !== null ? `No Focus seriam ${eur.format(row.gasoleo_eur)}` : 'Faltam os km deste mês'; });
+  kmDraw('nota_poup', (el, row) => { el.textContent = row && row.gasoleo_eur !== null ? `No Focus seriam ${eur.format(row.gasoleo_eur)} · inclui energia ainda na bateria` : 'Faltam os km deste mês'; });
 
   dash.draw('estado_chip', (el) => {
     const r = dash.data('estado');
