@@ -686,10 +686,9 @@ window.dash = (() => {
   });
   dash.draw('nota_cons100', (el) => {
     el.setAttribute('data-where', 'mes=' + window.evSel);
-    const v = eurKwhSel(); const c = consumoAtual();
-    el.textContent = v ? `${new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', minimumFractionDigits: 3 }).format(v)}/kWh × ${String(c.v).replace('.', ',')} kWh` + (c.quando ? ` · consumo de ${c.quando}` : '') : 'Sem carregamentos no mês';
+    el.textContent = eurKwhSel() ? 'Só a energia que gastaste' : 'Sem carregamentos no mês';
   });
-  kmDraw('nota_km100', (el, row) => { el.textContent = row ? (row.estimado ? '≈ ' : '') + `${new Intl.NumberFormat('pt-PT').format(row.km)} km` + (window.evSel === hojeMes ? ' até agora · mês em curso' : row.estimado ? ' no mês · estimado' : ' no mês') : 'Faltam os km deste mês'; });
+  kmDraw('nota_km100', (el, row) => { el.textContent = row ? 'Inclui energia ainda na bateria' : 'Faltam os km deste mês'; });
   kmDraw('kpi_poup', (el, row) => {
     el.classList.remove('ev-neg');
     if (!row || row.poupanca === null) { el.textContent = '—'; return; }
