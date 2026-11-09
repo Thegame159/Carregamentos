@@ -122,8 +122,6 @@ window.dash = (() => {
   .ev-sub i { font-style: normal; color: var(--ev-muted); margin: 0 .4em; }
   .ev-tile#t-cash { border-color: rgba(141,198,63,.55); background: linear-gradient(160deg, rgba(141,198,63,.14), rgba(20,31,41,.6) 60%); }
   .ev .ev-cash { color: var(--ev-lime); }
-  [data-draw=kpi_km100] { display: flex; flex-wrap: nowrap; align-items: flex-start; }
-  @media (max-width: 480px) { .ev-duo-2 { margin-left: 8px; padding-left: 7px; } .ev-duo span:first-child { font-size: 1.05rem; white-space: nowrap; } .ev-duo small { font-size: .62rem; } }
   .ev .ev-paidv { color: var(--ev-fg); font-weight: 600; font-variant-numeric: tabular-nums; }
   .ev .ev-odo { font-size: .78rem; opacity: .75; }
   .ev-hint { font-size: .85rem; color: var(--ev-muted); }
@@ -174,9 +172,6 @@ window.dash = (() => {
   .ev-tile-t { font-weight: 600; font-size: 1rem; }
   .ev-tile-v { font-size: 1.5rem; margin-top: 6px; font-variant-numeric: tabular-nums; }
   .ev-tile-n { color: var(--ev-muted); font-size: .85rem; margin-top: 2px; }
-  .ev-duo { display: inline-flex; flex-direction: column; line-height: 1.1; }
-  .ev-duo small { white-space: nowrap; font-size: .7rem; color: var(--ev-muted); letter-spacing: .02em; margin-top: 2px; }
-  .ev-duo-2 { margin-left: 16px; padding-left: 14px; border-left: 1px solid rgba(255,255,255,.15); color: var(--ev-lime); }
   .ev-ico { margin-top: auto; align-self: flex-end; width: 30px; height: 30px; fill: none; stroke: var(--ev-fg); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
   .ev-tile { position: relative; }
@@ -199,6 +194,7 @@ window.dash = (() => {
   .ev-sico { width: 14px; height: 14px; fill: none; stroke: var(--ev-cyan); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
   .ev-tile-km { border-color: rgba(95,227,208,.55); }
   .ev-tile-poup { border-color: rgba(141,198,63,.55); }
+  .ev-tile-cons { border-color: rgba(95,227,208,.55); }
   .ev .ev-neg { color: #FF8A93; }
   .ev-table tr.ev-caro td { background: rgba(255,90,102,.12); color: #FFD1D4; }
   .ev-table tr.ev-caro td:first-child { border-radius: 10px 0 0 10px; }
@@ -295,6 +291,12 @@ window.dash = (() => {
       <p class="ev-tile-v dash-skeleton" data-draw="kpi_km100" data-source="custo_km" data-field="custo_100km">—</p>
       <p class="ev-tile-n" data-draw="nota_km100" data-source="custo_km" data-field="km">—</p>
       <svg class="ev-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M6 15l3-8h6l3 8M9 11h6"/></svg>
+    </div>
+    <div class="ev-tile ev-tile-cons" id="t-cons100">
+      <p class="ev-tile-t">Custo pelo consumo</p>
+      <p class="ev-tile-v dash-skeleton" data-draw="kpi_cons100" data-source="por_mes">—</p>
+      <p class="ev-tile-n" data-draw="nota_cons100" data-source="por_mes">—</p>
+      <svg class="ev-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9M12 12l6-6M15 3h6v6"/></svg>
     </div>
     <div class="ev-tile ev-tile-poup" id="t-poupanca">
       <p class="ev-tile-t">Poupança vs gasóleo</p>
@@ -522,7 +524,7 @@ window.dash = (() => {
   const limites = () => { const ms = mesesDados(); return { min: ms.length ? (ms[0].mes < hojeMes ? ms[0].mes : hojeMes) : hojeMes, max: hojeMes }; };
   const linhaSel = () => mesesDados().find((d) => d.mes === window.evSel) || null;
   const nomeMes = (s) => new Date(s + '-01T00:00:00Z').toLocaleDateString('pt-PT', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-  const mesDraws = ['kpi_km100', 'nota_km100', 'kpi_poup', 'nota_poup', 'kpi_media', 'lista_semanas', 'pago_mes', 'kpi_cash', 'mes_nome', 'big_mes', 'barra_mes', 'barra_ritmo', 'barra_nota', 'sub_kwh', 'sub_n', 'kpi_kwh', 'kpi_preco', 'kpi_n', 'graf_mes'];
+  const mesDraws = ['kpi_km100', 'nota_km100', 'kpi_cons100', 'nota_cons100', 'kpi_poup', 'nota_poup', 'kpi_media', 'lista_semanas', 'pago_mes', 'kpi_cash', 'mes_nome', 'big_mes', 'barra_mes', 'barra_ritmo', 'barra_nota', 'sub_kwh', 'sub_n', 'kpi_kwh', 'kpi_preco', 'kpi_n', 'graf_mes'];
   const atualizaSetas = () => {
     const { min, max } = limites();
     document.querySelectorAll('[data-nav]').forEach((b) => { b.disabled = b.dataset.nav === '-1' ? window.evSel <= min : window.evSel >= max; });
@@ -658,13 +660,16 @@ window.dash = (() => {
     el.setAttribute('data-where', 'mes=' + window.evSel);
     fn(el, linhaKm());
   });
-  kmDraw('kpi_km100', (el, row) => {
-    const pm = dash.data('por_mes'); const m = pm.status === 'ok' ? pm.data.find((x) => x.mes === window.evSel) : null;
-    const eurKwh = m && m.kwh ? (m.pago ?? m.valor) / m.kwh : null;
-    const bloco = (v, lbl, cls) => { const d = document.createElement('span'); d.className = 'ev-duo ' + cls; const a = document.createElement('span'); a.textContent = v; const b = document.createElement('small'); b.textContent = lbl; d.append(a, b); return d; };
-    el.replaceChildren(
-      bloco(row ? eur.format(row.custo_100km) : '—', 'pelos km', ''),
-      bloco(eurKwh ? eur.format(eurKwh * 11.9) : '—', 'consumo', 'ev-duo-2'));
+  kmDraw('kpi_km100', (el, row) => { el.textContent = row ? eur.format(row.custo_100km) : '—'; });
+  const eurKwhSel = () => { const pm = dash.data('por_mes'); const m = pm.status === 'ok' ? pm.data.find((x) => x.mes === window.evSel) : null; return m && m.kwh ? (m.pago ?? m.valor) / m.kwh : null; };
+  dash.draw('kpi_cons100', (el) => {
+    const pm = dash.data('por_mes'); el.classList.toggle('dash-skeleton', pm.status === 'loading');
+    el.setAttribute('data-where', 'mes=' + window.evSel);
+    const v = eurKwhSel(); el.textContent = v ? eur.format(v * 11.9) : '—';
+  });
+  dash.draw('nota_cons100', (el) => {
+    el.setAttribute('data-where', 'mes=' + window.evSel);
+    const v = eurKwhSel(); el.textContent = v ? `${new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', minimumFractionDigits: 3 }).format(v)}/kWh × 11,9 kWh` : 'Sem carregamentos no mês';
   });
   kmDraw('nota_km100', (el, row) => { el.textContent = row ? (row.estimado ? '≈ ' : '') + `${new Intl.NumberFormat('pt-PT').format(row.km)} km` + (window.evSel === hojeMes ? ' até agora · mês em curso' : row.estimado ? ' no mês · estimado' : ' no mês') : 'Faltam os km deste mês'; });
   kmDraw('kpi_poup', (el, row) => {
