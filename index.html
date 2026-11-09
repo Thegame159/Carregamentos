@@ -113,7 +113,9 @@ window.dash = (() => {
   .ev-big { font-size: clamp(3.4rem, 11vw, 5.6rem); font-weight: 500; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
   .ev-big .ev-unit { font-size: .38em; font-weight: 500; vertical-align: .95em; margin-left: .12em; }
   .ev-meter { display: flex; align-items: center; gap: 10px; width: min(17rem, 80%); }
-  .ev-track { flex: 1; height: 7px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
+  .ev-track { flex: 1; height: 7px; border-radius: 4px; background: rgba(255,255,255,.12); position: relative; }
+  .ev-tick { position: absolute; top: -4px; width: 2px; height: 15px; border-radius: 1px; background: rgba(255,255,255,.85); transform: translateX(-1px); transition: left .9s cubic-bezier(.2,.8,.2,1); }
+  .ev-fill.ev-over { background: #F5A623; box-shadow: 0 0 14px rgba(245,166,35,.7); }
   .ev-fill { height: 100%; width: 0; background: var(--ev-lime); border-radius: 4px; box-shadow: 0 0 14px rgba(141,198,63,.7); transition: width .9s cubic-bezier(.2,.8,.2,1); }
   .ev-bolt { width: 18px; height: 18px; fill: rgba(255,255,255,.45); }
   .ev-sub { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
@@ -255,11 +257,11 @@ window.dash = (() => {
       <button class="ev-arrow" data-nav="1" aria-label="Mês seguinte"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
     </div>
     <div class="ev-meter">
-      <div class="ev-track"><div class="ev-fill" data-draw="barra_mes" data-source="por_mes" data-field="valor"></div></div>
+      <div class="ev-track"><div class="ev-fill" data-draw="barra_mes" data-source="por_mes" data-field="valor"></div><div class="ev-tick" data-draw="barra_ritmo" data-source="por_mes" hidden></div></div>
       <svg class="ev-bolt" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
     </div>
     <p class="ev-sub" data-take="cheio" hidden><span data-draw="sub_kwh" data-source="por_mes" data-field="kwh">—</span><i>/</i><span data-draw="sub_n" data-source="por_mes" data-field="carregamentos">—</span></p>
-    <p class="ev-hint" data-take="cheio" hidden>Usa as setas para mudar de mês · a barra compara com o teu mês mais caro</p>
+    <p class="ev-hint" data-take="cheio" hidden><span data-draw="barra_nota" data-source="por_mes">—</span><br>Usa as setas para mudar de mês</p>
     <p class="ev-empty" data-take="vazio" hidden>Ainda não há faturas. Envia os prints ou PDFs no chat e isto ganha vida.</p>
 
     <div class="ev-carwrap"><img class="ev-photo" alt="e-Niro cinza claro" src="car.webp"><span class="ev-l ev-head" style="left:37.2%;top:51.4%;width:13%;height:7%;transform:translate(-50%,-50%) rotate(-17deg)" aria-hidden="true"></span><svg class="ev-drlsvg" viewBox="0 0 963 521" preserveAspectRatio="none" aria-hidden="true"><defs><filter id="evDrlGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter></defs><g stroke="#fff" stroke-linecap="round" fill="none"><path d="M335 354 L317.5 374 M313.5 391 L346 419" stroke-width="14" opacity=".7" filter="url(#evDrlGlow)"/><path d="M335 354 L317.5 374 M313.5 391 L346 419" stroke-width="6"/></g></svg><span class="ev-l ev-turn" style="left:62.8%;top:39.6%;width:6.5%;height:3%;transform:translate(-50%,-50%) rotate(-4deg)" aria-hidden="true"></span><span class="ev-l ev-turn" style="left:31.5%;top:55%;width:4%;height:4%" aria-hidden="true"></span><span class="ev-beam" aria-hidden="true"></span></div>
@@ -515,7 +517,7 @@ window.dash = (() => {
   const limites = () => { const ms = mesesDados(); return { min: ms.length ? (ms[0].mes < hojeMes ? ms[0].mes : hojeMes) : hojeMes, max: hojeMes }; };
   const linhaSel = () => mesesDados().find((d) => d.mes === window.evSel) || null;
   const nomeMes = (s) => new Date(s + '-01T00:00:00Z').toLocaleDateString('pt-PT', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-  const mesDraws = ['kpi_km100', 'nota_km100', 'kpi_poup', 'nota_poup', 'kpi_media', 'lista_semanas', 'pago_mes', 'kpi_cash', 'mes_nome', 'big_mes', 'barra_mes', 'sub_kwh', 'sub_n', 'kpi_kwh', 'kpi_preco', 'kpi_n', 'graf_mes'];
+  const mesDraws = ['kpi_km100', 'nota_km100', 'kpi_poup', 'nota_poup', 'kpi_media', 'lista_semanas', 'pago_mes', 'kpi_cash', 'mes_nome', 'big_mes', 'barra_mes', 'barra_ritmo', 'barra_nota', 'sub_kwh', 'sub_n', 'kpi_kwh', 'kpi_preco', 'kpi_n', 'graf_mes'];
   const atualizaSetas = () => {
     const { min, max } = limites();
     document.querySelectorAll('[data-nav]').forEach((b) => { b.disabled = b.dataset.nav === '-1' ? window.evSel <= min : window.evSel >= max; });
@@ -561,11 +563,41 @@ window.dash = (() => {
     el.replaceChildren(num, u);
   });
 
-  dash.draw('barra_mes', (el) => {
+  const MES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  function barraInfo() {
+    const sel = window.evSel; if (!sel) return null;
+    const y = +sel.slice(0, 4), m = +sel.slice(5, 7);
+    const ant = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
     const row = linhaSel();
-    const max = d3.max(mesesDados(), (d) => d.valor) || 0;
+    const prev = mesesDados().find((d) => d.mes === ant);
+    const atual = row ? row.valor : 0, base = prev ? prev.valor : 0;
+    const hoje = new Date(), diasMes = new Date(y, m, 0).getDate();
+    const corrente = hoje.getFullYear() === y && hoje.getMonth() + 1 === m;
+    const ritmo = corrente ? hoje.getDate() / diasMes : null;
+    return { atual, base, pct: base ? atual / base : null, ritmo, nomeAnt: MES_LONGO[(m + 10) % 12] };
+  }
+  dash.draw('barra_mes', (el) => {
+    const b = barraInfo();
     el.setAttribute('data-where', 'mes=' + window.evSel);
-    el.style.width = row && max ? Math.min(100, 100 * row.valor / max) + '%' : '0%';
+    if (!b || b.pct == null) { el.style.width = '0%'; el.classList.remove('ev-over'); return; }
+    el.style.width = Math.min(100, 100 * b.pct) + '%';
+    el.classList.toggle('ev-over', b.pct > 1);
+  });
+  dash.draw('barra_ritmo', (el) => {
+    const b = barraInfo();
+    el.setAttribute('data-where', 'mes=' + window.evSel);
+    if (!b || b.pct == null || b.ritmo == null) { el.hidden = true; return; }
+    el.hidden = false; el.style.left = (100 * b.ritmo) + '%';
+  });
+  dash.draw('barra_nota', (el) => {
+    const b = barraInfo();
+    el.setAttribute('data-where', 'mes=' + window.evSel);
+    if (!b || b.pct == null) { el.textContent = 'A barra compara com o mês anterior · sem dados desse mês'; return; }
+    const pct = Math.round(100 * b.pct);
+    let txt = `${pct}% de ${b.nomeAnt}`;
+    if (b.ritmo != null) txt += b.pct > b.ritmo ? ' · ritmo acima' : ' · ritmo abaixo';
+    else txt += b.pct > 1 ? ' · gastaste mais' : ' · gastaste menos';
+    el.textContent = txt;
   });
 
   dash.draw('kpi_media', (el) => {
