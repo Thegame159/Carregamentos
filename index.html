@@ -19,7 +19,7 @@
 <script src="d3.min.js"></script>
 <script>
 window.dash = (() => {
-  const SOURCES = { faturas: 'data/faturas.csv', km: 'data/km.csv', odometro: 'data/odometro.csv', gasoleo: 'data/gasoleo.csv', estado: 'data/estado.json' };
+  const SOURCES = { faturas: 'data/faturas.csv', km: 'data/km.csv', odometro: 'data/odometro.csv', gasoleo: 'data/gasoleo.csv', bateria: 'data/bateria.csv', estado: 'data/estado.json' };
   const raw = {}, status = {}, calcs = {}, cache = {}, draws = new Map(), onD = [];
   let started = false;
   const split = (line) => {
@@ -264,7 +264,7 @@ window.dash = (() => {
       <svg class="ev-bolt" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
     </div>
     <p class="ev-sub" data-take="cheio" hidden><span data-draw="sub_kwh" data-source="por_mes" data-field="kwh">—</span><i>/</i><span data-draw="sub_n" data-source="por_mes" data-field="carregamentos">—</span></p>
-    <p class="ev-hint" data-take="cheio" hidden>Usa as setas para mudar de mês · a linha marca o total do mês anterior</p>
+    <p class="ev-hint" data-take="cheio" hidden>Usa as setas para mudar de mês</p>
     <p class="ev-empty" data-take="vazio" hidden>Ainda não há faturas. Envia os prints ou PDFs no chat e isto ganha vida.</p>
 
     <div class="ev-carwrap"><img class="ev-photo" alt="e-Niro cinza claro" src="car.webp"><span class="ev-l ev-head" style="left:37.2%;top:51.4%;width:13%;height:7%;transform:translate(-50%,-50%) rotate(-17deg)" aria-hidden="true"></span><svg class="ev-drlsvg" viewBox="0 0 963 521" preserveAspectRatio="none" aria-hidden="true"><defs><filter id="evDrlGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter></defs><g stroke="#fff" stroke-linecap="round" fill="none"><path d="M335 354 L317.5 374 M313.5 391 L346 419" stroke-width="14" opacity=".7" filter="url(#evDrlGlow)"/><path d="M335 354 L317.5 374 M313.5 391 L346 419" stroke-width="6"/></g></svg><span class="ev-l ev-turn" style="left:62.8%;top:39.6%;width:6.5%;height:3%;transform:translate(-50%,-50%) rotate(-4deg)" aria-hidden="true"></span><span class="ev-l ev-turn" style="left:31.5%;top:55%;width:4%;height:4%" aria-hidden="true"></span><span class="ev-beam" aria-hidden="true"></span></div>
@@ -307,9 +307,9 @@ window.dash = (() => {
       <svg class="ev-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v14M3 20h14M15 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V9l-3-3M8 8h4"/></svg>
     </div>
     <div class="ev-tile" id="t-preco">
-      <p class="ev-tile-t">Preço médio</p>
+      <p class="ev-tile-t">Preço médio pago</p>
       <p class="ev-tile-v dash-skeleton" data-draw="kpi_preco" data-source="por_mes" data-field="preco">—</p>
-      <p class="ev-tile-n">Por kWh, no mês escolhido</p>
+      <p class="ev-tile-n" data-draw="nota_preco" data-source="por_mes">Por kWh, no mês escolhido</p>
       <svg class="ev-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 6.5A7 7 0 1 0 17 17.5M4 10h9M4 14h9"/></svg>
     </div>
     <div class="ev-tile" id="t-cash">
@@ -526,7 +526,7 @@ window.dash = (() => {
   const limites = () => { const ms = mesesDados(); return { min: ms.length ? (ms[0].mes < hojeMes ? ms[0].mes : hojeMes) : hojeMes, max: hojeMes }; };
   const linhaSel = () => mesesDados().find((d) => d.mes === window.evSel) || null;
   const nomeMes = (s) => new Date(s + '-01T00:00:00Z').toLocaleDateString('pt-PT', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-  const mesDraws = ['kpi_km100', 'nota_km100', 'kpi_cons100', 'nota_cons100', 'kpi_poup', 'nota_poup', 'kpi_media', 'lista_semanas', 'pago_mes', 'kpi_cash', 'mes_nome', 'big_mes', 'barra_mes', 'sub_kwh', 'sub_n', 'kpi_kwh', 'kpi_preco', 'kpi_n', 'graf_mes'];
+  const mesDraws = ['kpi_km100', 'nota_km100', 'kpi_cons100', 'nota_cons100', 'kpi_poup', 'nota_poup', 'kpi_media', 'lista_semanas', 'pago_mes', 'kpi_cash', 'mes_nome', 'big_mes', 'barra_mes', 'sub_kwh', 'sub_n', 'kpi_kwh', 'kpi_preco', 'nota_preco', 'kpi_n', 'graf_mes'];
   const atualizaSetas = () => {
     const { min, max } = limites();
     document.querySelectorAll('[data-nav]').forEach((b) => { b.disabled = b.dataset.nav === '-1' ? window.evSel <= min : window.evSel >= max; });
@@ -550,7 +550,18 @@ window.dash = (() => {
     el.textContent = v === null || v === undefined ? vazio : fmt(v);
   });
   mesDraw('kpi_kwh', 'kwh', (v) => n1.format(v) + ' kWh', '0 kWh');
-  mesDraw('kpi_preco', 'preco', (v) => eur3.format(v), '—');
+  dash.draw('kpi_preco', (el) => {
+    const pm = dash.data('por_mes'); el.classList.toggle('dash-skeleton', pm.status === 'loading');
+    el.setAttribute('data-where', 'mes=' + window.evSel);
+    const m = pm.status === 'ok' ? pm.data.find((x) => x.mes === window.evSel) : null;
+    el.textContent = m && m.kwh ? eur3.format((m.pago ?? m.valor) / m.kwh) : '—';
+  });
+  dash.draw('nota_preco', (el) => {
+    const pm = dash.data('por_mes');
+    el.setAttribute('data-where', 'mes=' + window.evSel);
+    const m = pm.status === 'ok' ? pm.data.find((x) => x.mes === window.evSel) : null;
+    el.textContent = m && m.kwh ? `Por kWh · faturado ${eur3.format(m.valor / m.kwh)}` : 'Por kWh, no mês escolhido';
+  });
   mesDraw('kpi_n', 'carregamentos', (v) => String(v), '0');
   mesDraw('kpi_cash', 'cashback', (v) => eur.format(v), eur.format(0));
   mesDraw('pago_mes', 'pago', (v) => eur.format(v), eur.format(0));
@@ -661,14 +672,22 @@ window.dash = (() => {
   });
   kmDraw('kpi_km100', (el, row) => { el.textContent = row ? eur.format(row.custo_100km) : '—'; });
   const eurKwhSel = () => { const pm = dash.data('por_mes'); const m = pm.status === 'ok' ? pm.data.find((x) => x.mes === window.evSel) : null; return m && m.kwh ? (m.pago ?? m.valor) / m.kwh : null; };
+  const consumoAtual = () => {
+    const r = dash.data('bateria');
+    const rows = r.status === 'ok' ? [...r.data].filter((d) => Number(d.consumo) > 0).sort((a, b) => String(a.data_hora).localeCompare(String(b.data_hora))) : [];
+    const u = rows.pop();
+    return u ? { v: Number(u.consumo), quando: `${Number(String(u.data_hora).slice(8, 10))}/${Number(String(u.data_hora).slice(5, 7))}` } : { v: 11.9, quando: null };
+  };
+  dash.onData(() => { dash.draw('kpi_cons100'); dash.draw('nota_cons100'); });
   dash.draw('kpi_cons100', (el) => {
     const pm = dash.data('por_mes'); el.classList.toggle('dash-skeleton', pm.status === 'loading');
     el.setAttribute('data-where', 'mes=' + window.evSel);
-    const v = eurKwhSel(); el.textContent = v ? eur.format(v * 11.9) : '—';
+    const v = eurKwhSel(); el.textContent = v ? eur.format(v * consumoAtual().v) : '—';
   });
   dash.draw('nota_cons100', (el) => {
     el.setAttribute('data-where', 'mes=' + window.evSel);
-    const v = eurKwhSel(); el.textContent = v ? `${new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', minimumFractionDigits: 3 }).format(v)}/kWh × 11,9 kWh` : 'Sem carregamentos no mês';
+    const v = eurKwhSel(); const c = consumoAtual();
+    el.textContent = v ? `${new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', minimumFractionDigits: 3 }).format(v)}/kWh × ${String(c.v).replace('.', ',')} kWh` + (c.quando ? ` · consumo de ${c.quando}` : '') : 'Sem carregamentos no mês';
   });
   kmDraw('nota_km100', (el, row) => { el.textContent = row ? (row.estimado ? '≈ ' : '') + `${new Intl.NumberFormat('pt-PT').format(row.km)} km` + (window.evSel === hojeMes ? ' até agora · mês em curso' : row.estimado ? ' no mês · estimado' : ' no mês') : 'Faltam os km deste mês'; });
   kmDraw('kpi_poup', (el, row) => {
