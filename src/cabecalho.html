@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#08121B">
+<title>Carregamentos do e-Niro</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2308121B'/%3E%3Cpath d='M13 3 5 14h6l-1 7 8-11h-6z' fill='%238DC63F'/%3E%3C/svg%3E">
+<style>
+  :root { --font-anthropic-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color-scheme: dark; }
+  html, body { margin: 0; background: #050b11; }
+  body { font-family: var(--font-anthropic-sans); -webkit-font-smoothing: antialiased; }
+  #dash-root { max-width: 760px; margin: 0 auto; padding: 12px 12px 32px; box-sizing: border-box; }
+  #dash-root *, #dash-root *::before, #dash-root *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  .dash-skeleton { color: transparent !important; background: rgba(255,255,255,.06); border-radius: 8px; }
+  .ev-foot { text-align: center; color: #5d6873; font-size: 12px; margin-top: 18px; }
+</style>
+<script src="d3.min.js"></script>
+<script>
+window.dash = (() => {
+  const SOURCES = { faturas: 'data/faturas.csv', km: 'data/km.csv', odometro: 'data/odometro.csv', gasoleo: 'data/gasoleo.csv', bateria: 'data/bateria.csv', estado: 'data/estado.json' };
+  const raw = {}, status = {}, calcs = {}, cache = {}, draws = new Map(), onD = [];
+  let started = false;
+  const split = (line) => {
+    const out = []; let cur = '', q = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (q) { if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
+      else if (c === '"') q = true; else if (c === ',') { out.push(cur); cur = ''; } else cur += c;
+    }
+    out.push(cur); return out;
+  };
+  const parseCSV = (t) => {
+    const lines = t.replace(/^﻿/, '').trim().split(/\r?\n/).filter((l) => l.trim());
+    const h = split(lines[0]);
+    return lines.slice(1).map((l) => { const p = split(l); const o = {}; h.forEach((k, i) => { o[k] = p[i] ?? ''; }); return o; });
+  };
+  const data = (id) => {
+    if (calcs[id]) {
+      if (cache[id]) return cache[id];
+      const ins = calcs[id].inputs.map(data);
+      const bad = ins.find((x) => x.status !== 'ok');
+      if (bad) return { status: bad.status, data: [], message: bad.message, refreshing: false, meta: [] };
+      let res;
+      try { res = { status: 'ok', data: calcs[id].fn(...ins.map((x) => x.data)), refreshing: false, meta: [] }; }
+      catch (e) { console.error(id, e); res = { status: 'error', data: [], message: String(e), refreshing: false, meta: [] }; }
+      if (Array.isArray(res.data) && res.data[0]) res.columns = Object.keys(res.data[0]);
+      cache[id] = res; return res;
+    }
+    if (raw[id]) { const d = raw[id]; return { status: 'ok', data: d, columns: d[0] ? Object.keys(d[0]) : [], refreshing: false, meta: [] }; }
+    return { status: status[id] || 'loading', data: [], refreshing: false, meta: [] };
+  };
+  const run = (name) => {
+    const fn = draws.get(name); if (!fn) return;
+    document.querySelectorAll(`[data-draw="${name}"]`).forEach((el) => { try { fn(el); } catch (e) { console.error(name, e); } });
+  };
+  const renderAll = () => {
+    Object.keys(cache).forEach((k) => delete cache[k]);
+    onD.forEach((f) => { try { f(); } catch (e) { console.error(e); } });
+    draws.forEach((_, n) => run(n));
+  };
+  const start = async () => {
+    started = true; renderAll();
+    await Promise.all(Object.entries(SOURCES).map(async ([id, url]) => {
+      try {
+        const r = await fetch(url + '?v=' + Date.now(), { cache: 'no-store' });
+        if (!r.ok) throw new Error(r.status);
+        const t = await r.text();
+        raw[id] = url.endsWith('.json') ? JSON.parse(t) : parseCSV(t);
+        status[id] = 'ok';
+      } catch (e) { console.error(id, e); status[id] = 'error'; }
+    }));
+    renderAll();
+    let w = window.innerWidth, tm;
+    window.addEventListener('resize', () => { clearTimeout(tm); tm = setTimeout(() => { if (window.innerWidth !== w) { w = window.innerWidth; renderAll(); } }, 150); });
+  };
+  return {
+    data, start,
+    calc: (id, o) => { calcs[id] = o; },
+    loader: () => {},
+    onData: (fn) => { onD.push(fn); if (started) { try { fn(); } catch (e) { console.error(e); } } },
+    draw: (name, fn) => { if (typeof fn === 'function') { draws.set(name, fn); if (started) run(name); } else run(name); },
+    colors: ['#5FE3D0', '#8DC63F', '#1A9E86', '#B5E46A', '#7FB3FF', '#FFB21E', '#FF8A93', '#C9A7FF'],
+    params: () => ({}), setParams: () => {}, resetParams: () => {}, setLink: () => {}, refresh: () => {}
+  };
+})();
+
+</script>
+</head>
