@@ -599,7 +599,10 @@
     tick.style.display = ''; tick.style.left = e.linha + '%';
     const m = +window.evSel.slice(5, 7);
     ref.style.display = ''; ref.style.left = e.linha + '%';
-    ref.textContent = `${MES_CURTO[(m + 10) % 12]} · ${Math.round(b.base)} €`;
+    const kr = dash.data('km'); const ant = m === 1 ? `${+window.evSel.slice(0, 4) - 1}-12` : `${window.evSel.slice(0, 4)}-${String(m - 1).padStart(2, '0')}`;
+    const kmAnt = kr.status === 'ok' ? kr.data.find((x) => String(x.mes) === ant) : null;
+    const kmTxt = kmAnt && Number(kmAnt.km) ? ` · ${String(Math.round(Number(kmAnt.km))).replace(/\B(?=(\d{3})+(?!\d))/g, '.')} km` : '';
+    ref.textContent = `${MES_CURTO[(m + 10) % 12]} · ${Math.round(b.base)} €${kmTxt}`;
   });
 
   dash.draw('kpi_media', (el) => {
@@ -688,7 +691,7 @@
     const gasta = k.km * consumoAtual().v / 100;
     tbar(el, 100 * gasta / m.kwh, [negrito(Math.round(gasta) + ' kWh'), ' gastos'], `de ${String(m.kwh).replace('.', ',')}`);
   });
-  dash.onData(() => { dash.draw('bar_bat'); dash.draw('bar_gasta'); });
+  dash.onData(() => { dash.draw('bar_bat'); dash.draw('bar_gasta'); dash.draw('barra_mes'); });
   dash.draw('kpi_cons100', (el) => {
     const pm = dash.data('por_mes'); el.classList.toggle('dash-skeleton', pm.status === 'loading');
     el.setAttribute('data-where', 'mes=' + window.evSel);
