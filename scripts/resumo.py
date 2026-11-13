@@ -55,7 +55,7 @@ res = {
     'custo_100km': eur(pago / km * 100) if km else '—',
     'poupanca': ('+' if poup >= 0 else '') + eur(poup) if poup is not None else '—',
     'focus': eur(focus) if km else '—',
-    'gasoleo_100km': eur(CONSUMO_FOCUS * preco) + ' /100 km',
+    'gasoleo_100km': eur(CONSUMO_FOCUS * preco),
     'odometro': milhar(num(odo[-1]['km'])) + ' km' if odo else '—',
     'atualizado': agora.strftime('%d/%m %H:%M'),
     'bateria_pct': int(num(b['pct'])) if b else 0,
