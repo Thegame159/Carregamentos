@@ -15,3 +15,7 @@ O `index.html` é gerado a partir do painel do artefacto, para os dois serem sem
 - `src/cabecalho.html` — cabeçalho do site com o carregador dos ficheiros em `data/`;
 - `python3 scripts/build_site.py` — gera o `index.html`.
 Sempre que o painel muda, copia-se para `src/painel.html` e corre-se o script.
+
+## Widget vs site
+- `widget/*.csv` — dados do widget. Atualizados sempre que o painel muda; `scripts/resumo.py` lê daqui e escreve `data/resumo.json` (o que o KWGT lê).
+- `data/*.csv`, `src/painel.html`, `index.html` — o site. Só mudam quando o Fábio autoriza ("atualizar o site").

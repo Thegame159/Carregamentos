@@ -6,7 +6,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-D = os.path.join(RAIZ, 'data')
+D = os.path.join(RAIZ, 'widget')  # dados do widget (atualizados sempre)
+SAIDA = os.path.join(RAIZ, 'data')  # o KWGT lê data/resumo.json
 CONSUMO_FOCUS = 4.35  # L/100 km
 MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho',
          'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
@@ -61,6 +62,6 @@ res = {
     'bateria_kwh': (f"{num(b['pct']) / 100 * 64:.1f}".replace('.', ',') + ' kWh') if b else '—',
     'bateria_quando': (b['data_hora'][8:10] + '/' + b['data_hora'][5:7] + ' ' + b['data_hora'][11:16]) if b else '—',
 }
-with open(os.path.join(D, 'resumo.json'), 'w', encoding='utf-8') as f:
+with open(os.path.join(SAIDA, 'resumo.json'), 'w', encoding='utf-8') as f:
     json.dump(res, f, ensure_ascii=False, indent=1)
 print(json.dumps(res, ensure_ascii=False, indent=1))
