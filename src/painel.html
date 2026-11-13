@@ -90,6 +90,8 @@
   .ev-tile { border: 1px solid var(--ev-line); border-radius: 22px; padding: 18px 18px 14px; min-height: 9.5rem; display: flex; flex-direction: column; background: rgba(20,31,41,.6); backdrop-filter: blur(6px); }
   .ev-tile-t { font-weight: 600; font-size: 1rem; }
   .ev-tile-v { font-size: 1.5rem; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .ev-duo-l { display: flex; align-items: baseline; gap: 6px; }
+  .ev-duo-l small { font-size: .7rem; color: var(--ev-muted); font-weight: 500; }
   .ev-tile-n { color: var(--ev-muted); font-size: .85rem; margin-top: 2px; }
   .ev-ico { margin-top: auto; align-self: flex-end; width: 30px; height: 30px; fill: none; stroke: var(--ev-fg); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
@@ -437,6 +439,7 @@
           mes: k.mes, km: k.km, estimado: !!k.estimado,
           custo_100km: Math.round((valor / k.km) * 10000) / 100,
           gasoleo_eur: gas === null ? null : Math.round(gas * 100) / 100,
+          gasoleo_100km: preco ? Math.round(CONSUMO_FOCUS * preco * 100) / 100 : null,
           poupanca: gas === null ? null : Math.round((gas - valor) * 100) / 100
         };
       });
@@ -658,7 +661,13 @@
     el.setAttribute('data-where', 'mes=' + window.evSel);
     fn(el, linhaKm());
   });
-  kmDraw('kpi_km100', (el, row) => { el.textContent = row ? eur.format(row.custo_100km) : '—'; });
+  kmDraw('kpi_km100', (el, row) => {
+    if (!row) { el.textContent = '—'; return; }
+    const linha = (v, lbl) => { const d = document.createElement('span'); d.className = 'ev-duo-l'; d.append(document.createTextNode(v)); const s = document.createElement('small'); s.textContent = lbl; d.append(s); return d; };
+    const kids = [linha(eur.format(row.custo_100km), 'elétrico')];
+    if (row.gasoleo_100km) kids.push(linha(eur.format(row.gasoleo_100km), 'gasóleo'));
+    el.replaceChildren(...kids);
+  });
   const eurKwhSel = () => { const pm = dash.data('por_mes'); const m = pm.status === 'ok' ? pm.data.find((x) => x.mes === window.evSel) : null; return m && (m.kwh_pago ?? m.kwh) ? (m.pago ?? m.valor) / (m.kwh_pago ?? m.kwh) : null; };
   const consumoAtual = () => {
     const r = dash.data('bateria');
