@@ -182,8 +182,13 @@ window.dash = (() => {
   .ev-tile { border: 1px solid var(--ev-line); border-radius: 22px; padding: 18px 18px 14px; min-height: 9.5rem; display: flex; flex-direction: column; background: rgba(20,31,41,.6); backdrop-filter: blur(6px); }
   .ev-tile-t { font-weight: 600; font-size: 1rem; }
   .ev-tile-v { font-size: 1.5rem; margin-top: 6px; font-variant-numeric: tabular-nums; }
-  .ev-duo-l { display: flex; align-items: baseline; gap: 6px; }
-  .ev-duo-l small { font-size: .7rem; color: var(--ev-muted); font-weight: 500; }
+  .ev-duo-l { display: flex; align-items: center; gap: 8px; }
+  .ev-duo-l .ev-mi { width: 1.25rem; height: 1.25rem; }
+  .ev-mi { flex: none; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .ev-mi-e { stroke: var(--ev-lime); } .ev-mi-g { stroke: #F5A623; }
+  .ev-legenda { margin: 2px 0 0; font-size: .7rem; color: var(--ev-muted); display: flex; align-items: center; column-gap: 4px; flex-wrap: wrap; }
+  .ev-legenda span { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+  .ev-legenda .ev-mi { width: .8rem; height: .8rem; stroke-width: 2.2; }
   .ev-tile-n { color: var(--ev-muted); font-size: .85rem; margin-top: 2px; }
   .ev-ico { margin-top: auto; align-self: flex-end; width: 30px; height: 30px; fill: none; stroke: var(--ev-fg); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
@@ -324,6 +329,7 @@ window.dash = (() => {
     </div>
     <div class="ev-tile ev-tile-km" id="t-km100">
       <p class="ev-tile-t">Consumo €/100 km</p>
+      <p class="ev-legenda"><span><svg class="ev-mi ev-mi-e" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>elétrico</span><span>· <svg class="ev-mi ev-mi-g" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16M3 21h13M4 10h11M15 8h2a2 2 0 0 1 2 2v6a1.5 1.5 0 0 0 3 0V8l-3-3"/></svg>gasóleo</span></p>
       <p class="ev-tile-v dash-skeleton" data-draw="kpi_km100" data-source="custo_km" data-field="custo_100km">—</p>
       <p class="ev-tile-n" data-draw="nota_km100" data-source="custo_km" data-field="km">—</p>
       <div class="ev-tbar" data-draw="bar_bat" data-source="bateria"></div>
@@ -755,9 +761,12 @@ window.dash = (() => {
   });
   kmDraw('kpi_km100', (el, row) => {
     if (!row) { el.textContent = '—'; return; }
-    const linha = (v, lbl) => { const d = document.createElement('span'); d.className = 'ev-duo-l'; d.append(document.createTextNode(v)); const s = document.createElement('small'); s.textContent = lbl; d.append(s); return d; };
-    const kids = [linha(eur.format(row.custo_100km), 'elétrico')];
-    if (row.gasoleo_100km) kids.push(linha(eur.format(row.gasoleo_100km), 'gasóleo'));
+    const ICO = { e: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>', g: '<path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16M3 21h13M4 10h11M15 8h2a2 2 0 0 1 2 2v6a1.5 1.5 0 0 0 3 0V8l-3-3"/>' };
+    const linha = (v, tipo, nome) => { const d = document.createElement('span'); d.className = 'ev-duo-l'; d.setAttribute('aria-label', nome + ' ' + v);
+      const i = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); i.setAttribute('viewBox', '0 0 24 24'); i.setAttribute('class', 'ev-mi ev-mi-' + tipo); i.innerHTML = ICO[tipo];
+      d.append(i, document.createTextNode(v)); return d; };
+    const kids = [linha(eur.format(row.custo_100km), 'e', 'Elétrico')];
+    if (row.gasoleo_100km) kids.push(linha(eur.format(row.gasoleo_100km), 'g', 'Gasóleo'));
     el.replaceChildren(...kids);
   });
   const eurKwhSel = () => { const pm = dash.data('por_mes'); const m = pm.status === 'ok' ? pm.data.find((x) => x.mes === window.evSel) : null; return m && (m.kwh_pago ?? m.kwh) ? (m.pago ?? m.valor) / (m.kwh_pago ?? m.kwh) : null; };
