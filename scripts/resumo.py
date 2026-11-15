@@ -57,7 +57,7 @@ def custo_real(mes):
     da, dz = a['data_hora'][:10], z['data_hora'][:10]
     todas = ler('faturas.csv')
     ef = lambda r: num(r['valor']) - min(num(r.get('gems') or 0), num(r['valor']))
-    fs = [r for r in todas if da < r['data'] < dz]
+    fs = [r for r in todas if da < r['data'] <= dz]
     pg = sum(ef(r) - num(r['cashback']) for r in fs)
     kw = sum(num(r['kwh']) for r in fs)
     if kw > 0:
