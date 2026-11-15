@@ -670,7 +670,7 @@
     const ini = mes + '-01', antes = lt.filter((d) => d.dia < ini), dentro = lt.filter((d) => d.dia.slice(0, 7) === mes);
     const a = antes.length ? antes[antes.length - 1] : dentro[0], z = dentro[dentro.length - 1];
     if (!a || !z || z.km - a.km <= 0) return null;
-    const fs = f.data.filter((x) => { const d = String(x.data); return d > a.dia && d < z.dia; });
+    const fs = f.data.filter((x) => { const d = String(x.data); return d > a.dia && d <= z.dia; });
     const pago = fs.reduce((s, x) => s + valorEf(x) - (Number(x.cashback) || 0), 0);
     const kwh = fs.reduce((s, x) => s + (Number(x.kwh) || 0), 0);
     const todas = f.data.filter((x) => String(x.data) <= z.dia).slice(-15);
