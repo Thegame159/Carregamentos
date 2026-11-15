@@ -44,6 +44,33 @@ poup = focus - pago if km else None
 bat = sorted(ler('bateria.csv'), key=lambda r: r['data_hora']) if os.path.exists(os.path.join(D, 'bateria.csv')) else []
 b = bat[-1] if bat else None
 
+def custo_real(mes):
+    """Custo por 100 km entre duas leituras de bateria (igual ao painel)."""
+    lt = sorted([r for r in bat if num(r.get('pct')) > 0 and num(r.get('odometro')) > 0], key=lambda r: r['data_hora'])
+    ini = mes + '-01'
+    antes = [r for r in lt if r['data_hora'][:10] < ini]
+    dentro = [r for r in lt if r['data_hora'][:7] == mes]
+    a = antes[-1] if antes else (dentro[0] if dentro else None)
+    z = dentro[-1] if dentro else None
+    if not a or not z or num(z['odometro']) - num(a['odometro']) <= 0:
+        return None
+    da, dz = a['data_hora'][:10], z['data_hora'][:10]
+    todas = ler('faturas.csv')
+    ef = lambda r: num(r['valor']) - min(num(r.get('gems') or 0), num(r['valor']))
+    fs = [r for r in todas if da < r['data'] < dz]
+    pg = sum(ef(r) - num(r['cashback']) for r in fs)
+    kw = sum(num(r['kwh']) for r in fs)
+    if kw > 0:
+        pref = pg / kw
+    else:
+        ult = [r for r in todas if r['data'] <= dz][-15:]
+        kp = sum(num(r['kwh']) * (ef(r) / num(r['valor']) if num(r['valor']) else 1) for r in ult)
+        pref = sum(ef(r) - num(r['cashback']) for r in ult) / kp if kp else 0
+    delta = (num(z['pct']) - num(a['pct'])) / 100 * 64
+    return (pg - delta * pref) / (num(z['odometro']) - num(a['odometro'])) * 100
+
+cr = custo_real(mes)
+
 res = {
     'mes': f"{MESES[agora.month - 1]} {agora.year}",
     'gasto': eur(gasto),
@@ -52,7 +79,7 @@ res = {
     'kwh': f"{kwh:.1f}".replace('.', ',') + ' kWh',
     'carregamentos': str(len(fat)),
     'km_mes': milhar(km) + ' km' if km else '—',
-    'custo_100km': eur(pago / km * 100) if km else '—',
+    'custo_100km': eur(cr) if cr is not None else (eur(pago / km * 100) if km else '—'),
     'poupanca': ('+' if poup >= 0 else '') + eur(poup) if poup is not None else '—',
     'focus': eur(focus) if km else '—',
     'gasoleo_100km': eur(CONSUMO_FOCUS * preco),

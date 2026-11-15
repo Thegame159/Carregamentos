@@ -752,6 +752,26 @@ window.dash = (() => {
   document.addEventListener('click', (ev) => { if (!ev.target.closest('.ev-tile-click')) fecharSemanas(); });
 
   const linhaKm = () => { const r = dash.data('custo_km'); return r.status === 'ok' ? r.data.find((d) => d.mes === window.evSel) || null : null; };
+  // Custo real por 100 km: entre duas leituras de bateria, desconta a energia que ficou a mais (ou a menos) na bateria.
+  const custoReal = (mes) => {
+    const b = dash.data('bateria'), f = dash.data('faturas');
+    if (b.status !== 'ok' || f.status !== 'ok' || !mes) return null;
+    const lt = b.data.filter((d) => Number(d.pct) > 0 && Number(d.odometro) > 0)
+      .map((d) => ({ t: String(d.data_hora), dia: String(d.data_hora).slice(0, 10), pct: Number(d.pct), km: Number(d.odometro) }))
+      .sort((a, c) => a.t.localeCompare(c.t));
+    const ini = mes + '-01', antes = lt.filter((d) => d.dia < ini), dentro = lt.filter((d) => d.dia.slice(0, 7) === mes);
+    const a = antes.length ? antes[antes.length - 1] : dentro[0], z = dentro[dentro.length - 1];
+    if (!a || !z || z.km - a.km <= 0) return null;
+    const fs = f.data.filter((x) => { const d = String(x.data); return d > a.dia && d < z.dia; });
+    const pago = fs.reduce((s, x) => s + valorEf(x) - (Number(x.cashback) || 0), 0);
+    const kwh = fs.reduce((s, x) => s + (Number(x.kwh) || 0), 0);
+    const todas = f.data.filter((x) => String(x.data) <= z.dia).slice(-15);
+    const pRef = kwh > 0 ? pago / kwh : (() => { const k = todas.reduce((s, x) => s + kwhPago(x), 0); return k ? todas.reduce((s, x) => s + valorEf(x) - (Number(x.cashback) || 0), 0) / k : 0; })();
+    const delta = (z.pct - a.pct) / 100 * 64;
+    const custo = pago - delta * pRef, km = z.km - a.km;
+    const dm = (d) => `${Number(d.dia.slice(8, 10))}/${Number(d.dia.slice(5, 7))}`;
+    return { valor: custo / km * 100, km, de: dm(a), ate: dm(z) };
+  };
   const kmDraw = (name, fn) => dash.draw(name, (el) => {
     const r = dash.data('custo_km');
     el.classList.toggle('dash-skeleton', r.status === 'loading');
@@ -765,7 +785,8 @@ window.dash = (() => {
     const linha = (v, tipo, nome) => { const d = document.createElement('span'); d.className = 'ev-duo-l'; d.setAttribute('aria-label', nome + ' ' + v);
       const i = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); i.setAttribute('viewBox', '0 0 24 24'); i.setAttribute('class', 'ev-mi ev-mi-' + tipo); i.innerHTML = ICO[tipo];
       d.append(i, document.createTextNode(v)); return d; };
-    const kids = [linha(eur.format(row.custo_100km), 'e', 'Elétrico')];
+    const cr = custoReal(window.evSel);
+    const kids = [linha(eur.format(cr ? cr.valor : row.custo_100km), 'e', 'Elétrico')];
     if (row.gasoleo_100km) kids.push(linha(eur.format(row.gasoleo_100km), 'g', 'Gasóleo'));
     el.replaceChildren(...kids);
   });
@@ -811,7 +832,11 @@ window.dash = (() => {
     el.setAttribute('data-where', 'mes=' + window.evSel);
     el.textContent = eurKwhSel() ? 'Só a energia que gastaste' : 'Sem carregamentos no mês';
   });
-  kmDraw('nota_km100', (el, row) => { el.textContent = row ? 'Inclui energia ainda na bateria' : 'Faltam os km deste mês'; });
+  kmDraw('nota_km100', (el, row) => {
+    const cr = custoReal(window.evSel);
+    el.textContent = cr ? `Só a energia que já gastaste · ${cr.de} → ${cr.ate} · ${String(cr.km).replace(/\B(?=(\d{3})+(?!\d))/g, '.')} km` : (row ? 'Inclui energia ainda na bateria' : 'Faltam os km deste mês');
+  });
+  dash.onData(() => { dash.draw('kpi_km100'); dash.draw('nota_km100'); });
   kmDraw('kpi_poup', (el, row) => {
     el.classList.remove('ev-neg');
     if (!row || row.poupanca === null) { el.textContent = '—'; return; }
