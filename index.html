@@ -528,12 +528,22 @@ window.dash = (() => {
   dash.calc('custo_km', {
     inputs: ['por_mes', 'km_mes', 'gasoleo'],
     title: 'Custo por 100 km e poupança',
-    description: 'Pago na prática (gasto menos cashback) a dividir pelos km do mês; poupança = km × 4,35 L/100 km (consumo do Focus) × preço do gasóleo − pago na prática.',
+    description: 'Pago na prática (gasto menos cashback) a dividir pelos km do mês; poupança = km × 4,35 L/100 km (consumo do Focus) × preço do gasóleo desse mês (média semanal ERSE; mês atual = semana mais recente) − pago na prática.',
     fn: (por_mes, km_mes, gasoleo) => {
       const CONSUMO_FOCUS = 4.35;
-      const g = [...gasoleo].sort((a, b) => String(a.data).localeCompare(String(b.data))).pop();
-      const preco = g ? Number(g.preco_litro) : null;
+      const gs = [...gasoleo].sort((a, b) => String(a.data).localeCompare(String(b.data)));
+      const ultimo = gs.length ? gs[gs.length - 1] : null;
+      const hoje = new Date(), mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+      // Mês atual: preço da semana mais recente. Meses anteriores: média das semanas desse mês.
+      const precoMes = (mes) => {
+        if (mes >= mesAtual) return ultimo ? Number(ultimo.preco_litro) : null;
+        const sem = gs.filter((x) => String(x.data).slice(0, 7) === mes);
+        if (sem.length) return sem.reduce((s, x) => s + Number(x.preco_litro), 0) / sem.length;
+        const ant = gs.filter((x) => String(x.data).slice(0, 7) < mes);
+        return ant.length ? Number(ant[ant.length - 1].preco_litro) : (gs.length ? Number(gs[0].preco_litro) : null);
+      };
       return km_mes.filter((k) => k.km > 0).map((k) => {
+        const preco = precoMes(k.mes);
         const p = por_mes.find((x) => x.mes === k.mes);
         const valor = p ? (p.pago ?? p.valor) : 0;
         const gas = preco ? (k.km / 100) * CONSUMO_FOCUS * preco : null;
