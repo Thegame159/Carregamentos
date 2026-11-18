@@ -767,13 +767,21 @@
     el.textContent = cr ? `Só a energia que já gastaste · ${cr.de} → ${cr.ate} · ${String(cr.km).replace(/\B(?=(\d{3})+(?!\d))/g, '.')} km` : (row ? 'Inclui energia ainda na bateria' : 'Faltam os km deste mês');
   });
   dash.onData(() => { dash.draw('kpi_km100'); dash.draw('nota_km100'); });
+  // Poupança: gasóleo para os km do mês menos o custo elétrico só da energia gasta (km × custo real/100 km).
+  const poupReal = (row) => {
+    if (!row || row.poupanca === null) return null;
+    const cr = custoReal(window.evSel);
+    return cr ? { v: Math.round((row.gasoleo_eur - row.km * cr.valor / 100) * 100) / 100, real: true } : { v: row.poupanca, real: false };
+  };
   kmDraw('kpi_poup', (el, row) => {
     el.classList.remove('ev-neg');
-    if (!row || row.poupanca === null) { el.textContent = '—'; return; }
-    el.textContent = (row.poupanca >= 0 ? '+' : '−') + eur.format(Math.abs(row.poupanca));
-    el.classList.toggle('ev-neg', row.poupanca < 0);
+    const p = poupReal(row);
+    if (!p) { el.textContent = '—'; return; }
+    el.textContent = (p.v >= 0 ? '+' : '−') + eur.format(Math.abs(p.v));
+    el.classList.toggle('ev-neg', p.v < 0);
   });
-  kmDraw('nota_poup', (el, row) => { el.textContent = row && row.gasoleo_eur !== null ? `No Focus seriam ${eur.format(row.gasoleo_eur)} · inclui energia ainda na bateria` : 'Faltam os km deste mês'; });
+  kmDraw('nota_poup', (el, row) => { const p = poupReal(row); el.textContent = p && row.gasoleo_eur !== null ? `No Focus seriam ${eur.format(row.gasoleo_eur)} · ${p.real ? 'só a energia que gastaste' : 'inclui energia ainda na bateria'}` : 'Faltam os km deste mês'; });
+  dash.onData(() => { dash.draw('kpi_poup'); dash.draw('nota_poup'); });
 
   dash.draw('estado_chip', (el) => {
     const r = dash.data('estado');
