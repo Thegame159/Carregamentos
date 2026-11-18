@@ -104,6 +104,7 @@
   .ev-legenda span { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
   .ev-legenda .ev-mi { width: .8rem; height: .8rem; stroke-width: 2.2; }
   .ev-tile-n { color: var(--ev-muted); font-size: .85rem; margin-top: 2px; }
+  .ev-tile-n b { color: var(--ev-fg); font-weight: 600; }
   .ev-ico { margin-top: auto; align-self: flex-end; width: 30px; height: 30px; fill: none; stroke: var(--ev-fg); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
   .ev-tile { position: relative; }
@@ -229,7 +230,7 @@
     <div class="ev-tile ev-tile-click" id="t-semana" role="button" tabindex="0" aria-expanded="false" aria-controls="ev-drop-semanas">
       <p class="ev-tile-t">Média por semana</p>
       <p class="ev-tile-v dash-skeleton" data-draw="kpi_media" data-source="media_semanal" data-field="media">—</p>
-      <p class="ev-tile-n">Toca para ver as semanas</p>
+      <p class="ev-tile-n">Pago, já com cashback</p>
       <svg class="ev-ico ev-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
       <div class="ev-drop" id="ev-drop-semanas" hidden>
         <p class="ev-drop-t">Semanas do mês escolhido · segunda a domingo</p>
@@ -376,7 +377,7 @@
   dash.calc('semanas', {
     inputs: ['faturas'],
     title: 'Gasto por semana',
-    description: 'Valor por semana completa (segunda a domingo). Cada semana conta no mês onde cai a quinta-feira, ou seja, onde estão a maioria dos seus dias.',
+    description: 'Valor pago por semana completa (segunda a domingo), já com o cashback descontado. Cada semana conta no mês onde cai a quinta-feira, ou seja, onde estão a maioria dos seus dias.',
     fn: (faturas) => {
       const dias = faturas.map((f) => String(f.data).slice(0, 10)).sort();
       if (!dias.length) return [];
@@ -390,7 +391,7 @@
         const qui = new Date(m); qui.setUTCDate(qui.getUTCDate() + 3);
         const fim = f6.toISOString().slice(0, 10);
         let valor = 0, n = 0;
-        for (const f of faturas) { const d = String(f.data).slice(0, 10); if (d >= ini && d <= fim) { valor += valorEf(f); n += 1; } }
+        for (const f of faturas) { const d = String(f.data).slice(0, 10); if (d >= ini && d <= fim) { valor += valorEf(f) - (Number(f.cashback) || 0); n += 1; } }
         out.push({ inicio: ini, fim, mes: qui.toISOString().slice(0, 7), valor: Math.round(valor * 100) / 100, carregamentos: n });
       }
       return out;
@@ -791,7 +792,17 @@
     el.textContent = (p.v >= 0 ? '+' : '−') + eur.format(Math.abs(p.v));
     el.classList.toggle('ev-neg', p.v < 0);
   });
-  kmDraw('nota_poup', (el, row) => { const p = poupReal(row); el.textContent = p && row.gasoleo_eur !== null ? `No Focus seriam ${eur.format(row.gasoleo_eur)} · ${p.real ? 'só a energia que gastaste' : 'inclui energia ainda na bateria'}` : 'Faltam os km deste mês'; });
+  kmDraw('nota_poup', (el, row) => {
+    const p = poupReal(row);
+    if (!p || row.gasoleo_eur === null) { el.textContent = 'Faltam os km deste mês'; return; }
+    if (!p.real) { el.textContent = `No Focus seriam ${eur.format(row.gasoleo_eur)} · inclui energia ainda na bateria`; return; }
+    // Mostra a conta: Focus − elétrico (energia gasta) e o que ficou (ou saiu) da bateria.
+    const ele = Math.round((row.gasoleo_eur - p.v) * 100) / 100;
+    const pm = linhaSel(), pago = pm ? (pm.pago ?? pm.valor) : 0, resto = Math.round((pago - ele) * 100) / 100;
+    const kids = [document.createTextNode('Focus '), negrito(eur.format(row.gasoleo_eur)), document.createTextNode(' − elétrico '), negrito(eur.format(ele))];
+    if (Math.abs(resto) >= 0.01) kids.push(document.createElement('br'), document.createTextNode(resto > 0 ? `+ ${eur.format(resto)} ainda na bateria` : `${eur.format(-resto)} vieram da bateria do mês anterior`));
+    el.replaceChildren(...kids);
+  });
   dash.onData(() => { dash.draw('kpi_poup'); dash.draw('nota_poup'); });
 
   dash.draw('estado_chip', (el) => {
