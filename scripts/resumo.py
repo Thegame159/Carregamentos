@@ -70,6 +70,8 @@ def custo_real(mes):
     return (pg - delta * pref) / (num(z['odometro']) - num(a['odometro'])) * 100
 
 cr = custo_real(mes)
+if cr is not None and km:
+    poup = focus - km * cr / 100  # só a energia gasta (igual ao painel)
 
 res = {
     'mes': f"{MESES[agora.month - 1]} {agora.year}",
