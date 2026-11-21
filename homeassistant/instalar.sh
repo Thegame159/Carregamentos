@@ -1,6 +1,6 @@
 #!/bin/sh
 # Instala no servidor a atualização automática dos cartões do e-Niro.
-# Corre uma vez: curl -fsSL https://raw.githubusercontent.com/Thegame159/carregamentos/main/homeassistant/instalar.sh | sudo sh
+# Corre uma vez: curl -fsSL https://raw.githubusercontent.com/Thegame159/Carregamentos/main/homeassistant/instalar.sh | sudo sh
 set -e
 D=/opt/homeassistant/www/eniro
 mkdir -p "$D"
@@ -10,7 +10,7 @@ cat > /usr/local/bin/eniro-sync <<'SYNC'
 # Vai buscar o eniro-card.js ao GitHub e só o troca se mudou e parecer válido.
 D=/opt/homeassistant/www/eniro
 T=$(mktemp)
-if curl -fsSL --max-time 60 "https://raw.githubusercontent.com/Thegame159/carregamentos/main/homeassistant/eniro-card.js?t=$(date +%s)" -o "$T" \
+if curl -fsSL --max-time 60 "https://raw.githubusercontent.com/Thegame159/Carregamentos/main/homeassistant/eniro-card.js?t=$(date +%s)" -o "$T" \
    && grep -q "customElements.define('eniro-card'" "$T" \
    && ! cmp -s "$T" "$D/eniro-card.js"; then
   install -m 644 "$T" "$D/eniro-card.js"
