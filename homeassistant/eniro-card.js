@@ -839,8 +839,8 @@ p{margin:0}
         var all = a[0].filter(function (q) { return !isNaN(q[0]) && !isNaN(q[1]) && q[1] > 0 && q[0] < t0 - 864e5; }).concat(hist).sort(function (x, y) { return x[0] - y[0]; });
         // "ignorar": dias com registos errados (AAAA-MM-DD)
         var ign = (self.c.ignorar || []).map(String), dia = function (t) { var d = new Date(t); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
-        if (ign.length) all = all.filter(function (q) { return ign.indexOf(dia(q[0])) < 0; });
         var dedup = []; all.forEach(function (q) { if (!dedup.length || dedup[dedup.length - 1][1] !== q[1]) dedup.push(q); });
+        if (ign.length) dedup = dedup.filter(function (q) { return ign.indexOf(dia(q[0])) < 0; });
         self._pts = dedup; self.drawHist();
       });
     }
@@ -852,7 +852,10 @@ p{margin:0}
     }
     drawHist() {
       var reg = this._pts || [], old = this.antigos(), box = this.r.querySelector('[data-v=graf]');
-      var pts = old.concat(reg.filter(function (q) { return !old.length || q[0] > old[old.length - 1][0]; }));
+      var pts = [];
+      old.concat(reg.filter(function (q) { return !old.length || q[0] > old[old.length - 1][0]; })).forEach(function (q) {
+        if (!pts.length || pts[pts.length - 1][1] !== q[1]) pts.push(q);
+      });
       this.set('n', pts.length ? pts.length + (pts.length > 1 ? ' registos' : ' registo') : '');
       if (pts.length < 2 && reg.length) pts = reg;
       var dif = this.r.querySelector('[data-v=dif]');
@@ -866,10 +869,15 @@ p{margin:0}
       var d2 = pts.map(function (q, i) { return (i ? 'L' : 'M') + X(q[0]).toFixed(1) + ' ' + Y(q[1]).toFixed(1); }).join(' ');
       var dots = pts.map(function (q) { return q[2] ? '<circle cx="' + X(q[0]).toFixed(1) + '" cy="' + Y(q[1]).toFixed(1) + '" r="3" fill="#08121B" stroke="#8D99A6" stroke-width="1.5" vector-effect="non-scaling-stroke"/>' : '<circle cx="' + X(q[0]).toFixed(1) + '" cy="' + Y(q[1]).toFixed(1) + '" r="3.5" fill="#8DC63F"/>'; }).join('');
       var mes = function (t) { var d = new Date(t); return d.toLocaleDateString('pt-PT', { month: 'short' }).replace('.', '') + ' ' + String(d.getFullYear()).slice(2); };
-      var lbl = pts.map(function (q, k) { var x = X(q[0]) / 300 * 100, al = k === 0 ? 'left' : k === pts.length - 1 ? 'right' : 'center', tr = k === 0 ? '0' : k === pts.length - 1 ? '-100%' : '-50%';
-        return '<span style="position:absolute;left:' + x + '%;transform:translateX(' + tr + ');text-align:' + al + ';white-space:nowrap"><b style="color:' + (q[2] ? '#aab6c0' : '#8DC63F') + ';font-weight:600">' + fmtN(q[1], q[1] % 1 ? 1 : 0) + '%</b> · ' + mes(q[0]) + (q[3] ? '<br><i style="font-style:normal;color:#6f7c88">' + q[3] + '</i>' : '') + '</span>'; }).join('');
-      box.innerHTML = '<svg viewBox="0 0 300 54" preserveAspectRatio="none"><path pathLength="1" d="' + d2 + '" fill="none" stroke="#8DC63F" stroke-width="2" vector-effect="non-scaling-stroke" opacity=".85"/>' + dots + '</svg>' +
-        '<div style="position:relative;height:' + (pts.some(function (q) { return q[3]; }) ? 30 : 16) + 'px;font-size:.62rem;color:#8D99A6;margin-top:4px">' + lbl + '</div>' +
+      var pos = function (k) { var x = X(pts[k][0]) / 300 * 100; return 'left:' + x + '%;transform:translateX(' + (k === 0 ? '-10%' : k === pts.length - 1 ? '-90%' : '-50%') + ')'; };
+      var val = pts.map(function (q, k) {
+        return '<span title="' + (q[3] || '') + '" style="position:absolute;top:' + (Y(q[1]) - 15).toFixed(0) + 'px;' + pos(k) + ';white-space:nowrap;font-weight:600;color:' + (q[2] ? '#aab6c0' : '#8DC63F') + '">' + fmtN(q[1], q[1] % 1 ? 1 : 0) + '</span>'; }).join('');
+      var notas = pts.length <= 6, ult = '';
+      var bx = pts.map(function (q, k) { var m = mes(q[0]), show = m !== ult; ult = m; if (!show) return '';
+        return '<span style="position:absolute;top:0;' + pos(k) + ';white-space:nowrap;text-align:center">' + m + (notas && q[3] ? '<br><i style="font-style:normal;color:#6f7c88">' + q[3] + '</i>' : '') + '</span>'; }).join('');
+      box.innerHTML = '<div style="position:relative;padding-top:14px;font-size:.62rem"><div style="position:absolute;left:0;right:0;top:14px;height:54px">' + val + '</div>' +
+        '<svg viewBox="0 0 300 54" preserveAspectRatio="none" style="margin-top:0"><path pathLength="1" d="' + d2 + '" fill="none" stroke="#8DC63F" stroke-width="2" vector-effect="non-scaling-stroke" opacity=".85"/>' + dots + '</svg></div>' +
+        '<div style="position:relative;height:' + (notas && pts.some(function (q) { return q[3]; }) ? 28 : 14) + 'px;font-size:.62rem;color:#8D99A6;margin-top:4px">' + bx + '</div>' +
         (old.length ? '<p style="font-size:.64rem;color:#6f7c88;margin-top:4px">○ registos antigos (anotados à mão) · ● guardados no cartão</p>' : '');
     }
   }
