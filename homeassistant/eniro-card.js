@@ -182,7 +182,7 @@ svg.lt{inset:0;width:100%;height:100%;border-radius:0;overflow:visible}
       tyres: 'binary_sensor.' + p + '_tire_pressure_all', aux: 'sensor.' + p + '_car_battery_level',
       auto_cut: 'binary_sensor.' + p + '_auto_cut_battery_pre_warning', key: 'binary_sensor.' + p + '_smart_key_battery_warning',
       odometer: 'sensor.' + p + '_odometer', climate: 'climate.' + p + '_climate_control',
-      updated: 'sensor.' + p + '_last_updated_at', refresh: 'button.' + p + '_force_refresh', pedidos: 'counter.eniro_pedidos_hoje',
+      updated: 'sensor.' + p + '_last_updated_at', soh: 'sensor.soh_da_bateria_registado', ev_power: 'sensor.evdash_c1a8fb67d2e00b1f547a343ab1043b59_batpowerkw', refresh: 'button.' + p + '_force_refresh', pedidos: 'counter.eniro_pedidos_hoje',
       cons30: 'sensor.' + p + '_30_day_average_energy_consumption', today: 'sensor.' + p + '_today_s_daily_driving_stats',
       door_fl: 'binary_sensor.' + p + '_front_left_door', door_fr: 'binary_sensor.' + p + '_front_right_door',
       door_rl: 'binary_sensor.' + p + '_back_left_door', door_rr: 'binary_sensor.' + p + '_back_right_door',
@@ -265,10 +265,22 @@ svg.lt{inset:0;width:100%;height:100%;border-radius:0;overflow:visible}
     s(k) { var id = this.e[k], st = id && this._h.states[id]; return st && st.state !== 'unavailable' && st.state !== 'unknown' ? st : null; }
     on(k) { var st = this.s(k); return !!st && ['on', 'open', 'true'].indexOf(st.state) > -1; }
     num(k) { var st = this.s(k); var n = st ? Number(st.state) : NaN; return isNaN(n) ? null : n; }
+    // capacidade útil: 64 kWh × SoH registado (ou "capacity" fixo na configuração)
+    cap() {
+      if (this.c.capacity) return Number(this.c.capacity);
+      var soh = this.num('soh');
+      return 64 * (soh != null && soh >= 50 && soh <= 110 ? soh / 100 : 1);
+    }
+    // potência real lida pelo evDash (OBD), só se tiver chegado há menos de 3 minutos
+    evPow() {
+      var st = this.s('ev_power'); if (!st) return null;
+      var t = Date.parse(st.last_updated || st.last_changed || ''), n = Number(st.state);
+      return isNaN(n) || isNaN(t) || Date.now() - t > 18e4 ? null : n;
+    }
     // o e-Niro não envia a potência: estima-se pelo tempo que falta (calculado pelo próprio carro)
     estima(soc, min) {
       if (soc == null || !(min > 0)) return null;
-      var cap = this.c.capacity || 64, ac = this.num('limit'), dc = this.num('dc_limit');
+      var cap = this.cap(), ac = this.num('limit'), dc = this.num('dc_limit');
       if (ac == null) ac = 100; if (dc == null) dc = 80;
       var p = ac > soc ? (ac - soc) / 100 * cap / (min / 60) : null;
       if ((p == null || p > 11) && dc > soc) p = (dc - soc) / 100 * cap / (min / 60);
@@ -280,7 +292,7 @@ svg.lt{inset:0;width:100%;height:100%;border-radius:0;overflow:visible}
       if (!this._h.callWS || (this._hq && Date.now() - this._hq < 6e5)) return;
       this._hq = Date.now();
       var end = new Date(), start = new Date(end - 7 * 864e5);
-      var ids = [e.soc, e.charging, e.power, e.time_left].filter(Boolean);
+      var ids = [e.soc, e.charging, e.power, e.time_left, e.ev_power].filter(Boolean);
       this._h.callWS({ type: 'history/history_during_period', start_time: start.toISOString(), end_time: end.toISOString(), entity_ids: ids, minimal_response: true, no_attributes: true, significant_changes_only: false }).then(function (res) {
         var rd = function (id, num) {
           return ((res && res[id]) || []).map(function (x) {
@@ -291,12 +303,12 @@ svg.lt{inset:0;width:100%;height:100%;border-radius:0;overflow:visible}
         };
         var soc = rd(e.soc, true), t0 = Date.now() - 864e5, before = soc.filter(function (q) { return q[0] < t0; });
         self._pts = (before.length ? [before[before.length - 1]] : []).concat(soc.filter(function (q) { return q[0] >= t0; }));
-        self._sess = self.lastSession(rd(e.charging, false), soc, rd(e.power, true), rd(e.time_left, true));
+        self._sess = self.lastSession(rd(e.charging, false), soc, rd(e.power, true), rd(e.time_left, true), rd(e.ev_power, true));
         self.drawSpark(); self.drawSession();
       }).catch(function () {});
     }
     // último carregamento terminado: do primeiro "on" ao "off" seguinte
-    lastSession(chg, soc, pw, tl) {
+    lastSession(chg, soc, pw, tl, ev) {
       var s = null, e = null;
       for (var i = chg.length - 1; i >= 0; i--) {
         if (chg[i][1] === 'off' && e == null && i > 0 && chg[i - 1][1] === 'on') e = chg[i][0];
@@ -311,10 +323,21 @@ svg.lt{inset:0;width:100%;height:100%;border-radius:0;overflow:visible}
         ps = tl.filter(function (q) { return q[0] >= s && q[0] < e && q[1] >= 10; }).map(function (q) { return self.estima(at(soc, q[0]), q[1]); }).filter(function (x) { return x != null; });
         est = ps.length > 0;
       }
-      var cap = this.c.capacity || 64, kwh = (s0 != null && s1 != null) ? Math.max(0, (s1 - s0) / 100 * cap) : null;
+      var cap = this.cap(), kwh = (s0 != null && s1 != null) ? Math.max(0, (s1 - s0) / 100 * cap) : null, fonte = est ? 'est' : 'kia';
+      // evDash: leituras reais durante a carga (a nuvem da Kia apanha o início e o fim com atraso)
+      var ev2 = (ev || []).filter(function (q) { return q[0] >= s - 36e5 && q[0] <= e + 36e5; }), on = ev2.filter(function (q) { return q[1] > 0.3; });
+      if (on.length >= 3) {
+        var ss = Math.min(s, on[0][0]), ee = Math.max(e, on[on.length - 1][0]), en = 0, cob = 0;
+        for (var j = 0; j < ev2.length - 1; j++) {
+          var dt = Math.min(ev2[j + 1][0] - ev2[j][0], 3e5);
+          if (ev2[j][0] >= ss && ev2[j][0] < ee) { if (ev2[j][1] > 0) en += ev2[j][1] * dt / 36e5; cob += dt; }
+        }
+        if (cob >= 0.5 * (ee - ss)) { s = ss; e = ee; kwh = en; }
+        ps = on.map(function (q) { return q[1]; }); est = false; fonte = 'evdash';
+      }
       var h = (e - s) / 36e5;
       return { s: s, e: e, s0: s0, s1: s1, kwh: kwh, h: h, avg: kwh != null && h > 0 ? kwh / h : null,
-        min: ps.length ? Math.min.apply(null, ps) : null, max: ps.length ? Math.max.apply(null, ps) : null, est: est };
+        min: ps.length ? Math.min.apply(null, ps) : null, max: ps.length ? Math.max.apply(null, ps) : null, est: est, fonte: fonte };
     }
     drawSession() {
       var x = this._sess, box = this.r.querySelector('.sess');
@@ -334,7 +357,7 @@ svg.lt{inset:0;width:100%;height:100%;border-radius:0;overflow:visible}
       this.set('s_max', x.max == null ? '—' : aq + fmtN(x.max, 1) + ' kW');
       var caiu = x.min != null && x.max != null && x.max > 2 && x.min < x.max * 0.7;
       box.classList.toggle('drop', caiu);
-      this.set('s_nota', x.min == null ? 'Sem leituras de potência nesta carga' : (caiu ? 'A potência baixou durante a carga (de ' + fmtN(x.max, 1) + ' para ' + fmtN(x.min, 1) + ' kW)' : 'Potência estável durante a carga') + (x.est ? ' · estimada pelo tempo que faltava' : ''));
+      this.set('s_nota', x.min == null ? 'Sem leituras de potência nesta carga' : (caiu ? 'A potência baixou durante a carga (de ' + fmtN(x.max, 1) + ' para ' + fmtN(x.min, 1) + ' kW)' : 'Potência estável durante a carga') + (x.est ? ' · estimada pelo tempo que faltava' : x.fonte === 'evdash' ? ' · medida pelo evDash' : ''));
     }
     // minutos que faltam até poder atualizar outra vez (dados ou último pedido há menos de N min)
     espera() {
@@ -413,7 +436,7 @@ svg.lt{inset:0;width:100%;height:100%;border-radius:0;overflow:visible}
     }
     u() {
       var h = this._h, root = this.r.querySelector('.root'), self = this;
-      var ch = this.on('charging'), pl = ch || this.on('plugged');
+      var evp = this.evPow(), ch = this.on('charging') || (evp != null && evp > 0.8), pl = ch || this.on('plugged');
       var soc = this.num('soc'), lim = this.num('limit'); if (lim == null) lim = 100;
       root.classList.toggle('chg', ch); root.classList.toggle('plug', pl && !ch);
       root.classList.toggle('low', soc != null && soc < 20 && !ch);
@@ -423,7 +446,8 @@ svg.lt{inset:0;width:100%;height:100%;border-radius:0;overflow:visible}
       this.r.querySelector('.tick').style.left = lim + '%';
       this.set('limtxt', 'limite ' + Math.round(lim) + '%');
       var p = this.num('power'), left = this.num('time_left'), est = false;
-      if (ch && !(p > 0)) { p = this.estima(soc, left); est = p != null; }
+      if (ch && evp != null && evp > 0.3) p = Math.round(evp * 10) / 10;
+      else if (ch && !(p > 0)) { p = this.estima(soc, left); est = p != null; }
       this.set('state', ch ? ('A carregar' + (p ? ' · ' + fmtN(p, 1) + ' kW' : '')) : pl ? 'Ligado à tomada' : 'Estacionado');
       this.set('sub2', ch ? 'a carregar' : pl ? 'ligado' : 'estacionado');
       this.set('power', p == null ? '—' : (est ? '≈ ' : '') + fmtN(p, 1) + ' kW');
@@ -469,8 +493,8 @@ svg.lt{inset:0;width:100%;height:100%;border-radius:0;overflow:visible}
       box.innerHTML = al.map(function (a) { return '<div class="a" data-k="' + a[2] + '"><svg viewBox="0 0 24 24" aria-hidden="true">' + IC[a[0]] + '</svg><span>' + a[1] + '</span></div>'; }).join('');
       box.querySelectorAll('.a').forEach(function (a) { a.addEventListener('click', function () { var id = self.e[a.getAttribute('data-k')]; if (!id) return; var ev = new Event('hass-more-info', { bubbles: true, composed: true }); ev.detail = { entityId: id }; self.dispatchEvent(ev); }); });
       box.hidden = !al.length;
-      // energia disponível (bateria de 64 kWh)
-      this.set('kwh', soc == null ? '—' : fmtN(soc / 100 * (this.c.capacity || 64), 0) + ' kWh');
+      // energia disponível (64 kWh × SoH)
+      this.set('kwh', soc == null ? '—' : fmtN(soc / 100 * this.cap(), 0) + ' kWh');
       var od = this.num('odometer'); this.set('odo', od == null ? '— km' : fmtN(od) + ' km');
       var cl = this.s('climate');
       var clOn = cl && cl.state !== 'off';
@@ -813,6 +837,9 @@ p{margin:0}
         var hist = a[1].filter(function (q) { return !isNaN(q[0]) && !isNaN(q[1]) && q[1] > 0; });
         var t0 = hist.length ? hist[0][0] : Infinity;
         var all = a[0].filter(function (q) { return !isNaN(q[0]) && !isNaN(q[1]) && q[1] > 0 && q[0] < t0 - 864e5; }).concat(hist).sort(function (x, y) { return x[0] - y[0]; });
+        // "ignorar": dias com registos errados (AAAA-MM-DD)
+        var ign = (self.c.ignorar || []).map(String), dia = function (t) { var d = new Date(t); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
+        if (ign.length) all = all.filter(function (q) { return ign.indexOf(dia(q[0])) < 0; });
         var dedup = []; all.forEach(function (q) { if (!dedup.length || dedup[dedup.length - 1][1] !== q[1]) dedup.push(q); });
         self._pts = dedup; self.drawHist();
       });
