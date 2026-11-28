@@ -859,9 +859,11 @@ p{margin:0}
       this.set('n', pts.length ? pts.length + (pts.length > 1 ? ' registos' : ' registo') : '');
       if (pts.length < 2 && reg.length) pts = reg;
       var dif = this.r.querySelector('[data-v=dif]');
-      if (reg.length > 1) {
-        var d = reg[reg.length - 1][1] - reg[0][1], dias = Math.round((reg[reg.length - 1][0] - reg[0][0]) / 864e5);
-        dif.innerHTML = (d <= 0 ? '−' : '+') + fmtN(Math.abs(d), 1) + ' pp em <b>' + dias + ' dias</b>';
+      // compara o valor atual com o ponto anterior do gráfico (antigo ou guardado)
+      if (pts.length > 1) {
+        var pa = pts[pts.length - 2], pu = pts[pts.length - 1], d = pu[1] - pa[1];
+        var quando = new Date(pa[0]).toLocaleDateString('pt-PT', { month: 'short' }).replace('.', '') + ' ' + String(new Date(pa[0]).getFullYear()).slice(2);
+        dif.innerHTML = '<b>' + (d < 0 ? '−' : '+') + fmtN(Math.abs(d), 1) + ' pp</b> desde ' + quando + (pa[3] ? ' (' + pa[3] + ')' : '');
       } else dif.textContent = '';
       if (pts.length < 2) { box.innerHTML = '<p class="none">' + (pts.length ? 'Ainda só há um registo. A evolução aparece a partir do segundo.' : 'Escreve o valor do evDash e carrega em Guardar.') + '</p>'; return; }
       var t0 = pts[0][0], t1 = pts[pts.length - 1][0], lo = Math.min.apply(null, pts.map(function (q) { return q[1]; })) - 1, hi = Math.max.apply(null, pts.map(function (q) { return q[1]; })) + 1;
