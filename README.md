@@ -19,8 +19,3 @@ Sempre que o painel muda, copia-se para `src/painel.html` e corre-se o script.
 ## Widget vs site
 - `widget/*.csv` — dados do widget. Atualizados sempre que o painel muda; `scripts/resumo.py` lê daqui e escreve `data/resumo.json` (o que o KWGT lê).
 - `data/*.csv`, `src/painel.html`, `index.html` — o site. Só mudam quando o Fábio autoriza ("atualizar o site").
-
-## Home Assistant (`homeassistant/`)
-- `eniro-card.js` — cartões do e-Niro para o Home Assistant.
-- `instalar.sh` — corre-se uma vez no servidor. Cria o `eniro-sync` (de 5 em 5 min vai buscar o `eniro-card.js` daqui) e o `loader.js` (recurso do painel que carrega sempre a versão mais recente).
-- Para atualizar os cartões basta fazer push do `eniro-card.js`; o servidor apanha-o em até 5 minutos.
